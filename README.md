@@ -47,6 +47,12 @@ browse.file_model = "coder"                  # urn:llm:coder:ask
 browse.dir_model = "ask"                     # urn:llm:ask
 browse.file_max_tokens = 400
 browse.dir_max_tokens = 600
+browse.review_model = "coder"                # review pass (urn:repo:{repo}:review:{path})
+browse.review_max_tokens = 800               # findings carry quotes — raise for big files/PRs
+browse.pr_model = "coder"                    # pull-request explain (the PR family)
+browse.pr_max_tokens = 600
+browse.review_model_label = "qwen3:30b"      # operator overrides folded into version tags;
+browse.pr_model_label = "qwen3:30b"          # unset, the true model id resolves at derive time
 ```
 
 No `browse.root` ⇒ no browse family at all (and no `urn:llm:*`) — the original

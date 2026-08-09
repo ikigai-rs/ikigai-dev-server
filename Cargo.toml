@@ -1,7 +1,7 @@
 [package]
 name = "ikigai-dev-server"
 description = "A standalone, linkage-gated ikigai server for development tooling: git/gh/cargo + graphs + the browse family (persistent explanations/annotations), exec and llm rate-limited, over IPC."
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 authors = ["Brian Sletten <brian.sletten@gmail.com>"]
@@ -21,7 +21,7 @@ ikigai-core = "0.1.49"      # 0.1.49 = kernel-enforced declared requires (ikigai
 ikigai-repo = "0.1.0"       # urn:system:exec + urn:repo:* (the dev seam)
 ikigai-rdf = "0.1.4"        # urn:rdf:* (graph ops)
 ikigai-sparql = "0.1.6"     # urn:sparql:*; 0.1.6 = space_with_store + load_vocabulary (the shared-store seam)
-ikigai-browse = "0.2.2"     # urn:repo:{repo}:tree/file/…/explain + urn:annotation:* (the browse family)
+ikigai-browse = "0.2.6"     # urn:repo:{repo}:tree/file/…/explain/review + urn:annotation:* + the PR family; 0.2.6 = review_* (0.2.5) and pr_* (0.2.6) ExplainConfig knobs we wire
 ikigai-llm = "0.10"         # urn:llm:* — the explain seam's derivation engine (Registry::from_json)
 ikigai-http = "0.1.7"       # HttpTransport; 0.1.7 = the endpoint-follows-redirects contract our impl obeys
 ikigai-throttle = "0.1.0"   # RateLimit overlay around the exec + llm seams
