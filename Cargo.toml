@@ -1,7 +1,7 @@
 [package]
 name = "ikigai-dev-server"
-description = "A standalone, linkage-gated ikigai server for development tooling: git/gh/cargo + graphs, exec rate-limited, over IPC."
-version = "0.1.0"
+description = "A standalone, linkage-gated ikigai server for development tooling: git/gh/cargo + graphs + the browse family (persistent explanations/annotations), exec and llm rate-limited, over IPC."
+version = "0.2.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 authors = ["Brian Sletten <brian.sletten@gmail.com>"]
@@ -13,12 +13,24 @@ path = "src/main.rs"
 
 [dependencies]
 # The Cargo.toml IS the module manifest: this binary links ONLY these — no
-# EventKit, no LLM backend, no calendar. A vulnerability in those can't be
-# reached because they aren't compiled in. Linkage-gating, not config-gating.
-ikigai-core = "0.1.39"
+# EventKit, no calendar. A vulnerability in those can't be reached because they
+# aren't compiled in. Linkage-gating, not config-gating. (ikigai-llm IS linked,
+# deliberately — an outbound HTTP client to local inference, not the
+# EventKit/TCC class the gating exists for; see src/llm.rs for the argument.)
+ikigai-core = "0.1.49"      # 0.1.49 = kernel-enforced declared requires (ikigai-browse's floor)
 ikigai-repo = "0.1.0"       # urn:system:exec + urn:repo:* (the dev seam)
 ikigai-rdf = "0.1.4"        # urn:rdf:* (graph ops)
-ikigai-sparql = "0.1.1"     # urn:sparql:* (query)
-ikigai-throttle = "0.1.0"   # RateLimit overlay around the exec seam
+ikigai-sparql = "0.1.6"     # urn:sparql:*; 0.1.6 = space_with_store + load_vocabulary (the shared-store seam)
+ikigai-browse = "0.2.2"     # urn:repo:{repo}:tree/file/…/explain + urn:annotation:* (the browse family)
+ikigai-llm = "0.10"         # urn:llm:* — the explain seam's derivation engine (Registry::from_json)
+ikigai-http = "0.1.7"       # HttpTransport; 0.1.7 = the endpoint-follows-redirects contract our impl obeys
+ikigai-throttle = "0.1.0"   # RateLimit overlay around the exec + llm seams
 ikigai-ipc = "0.1.9"        # serve over a Unix socket
 ikigai-vocab = "0.1.33"     # the Turtle meta renderer (describe / catalog)
+# The persistence switch for the shared browse/sparql store: ikigai-browse and
+# ikigai-sparql both keep oxigraph at default-features = false (no storage
+# engine), and this feature-unifies Store::open onto the one shared Store type
+# they all use — RocksDB, exclusive lock, the reason this server owns browse.
+oxigraph = { version = "0.5", default-features = false, features = ["rocksdb"] }
+async-trait = "0.1"         # the HttpTransport impl (blocking ureq under the async trait)
+ureq = "2"                  # the native HTTP client behind urn:llm:*
