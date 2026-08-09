@@ -65,12 +65,26 @@ pub fn wire(settings: &BrowseSettings) -> Browse {
 
     let mut explain = ikigai_browse::ExplainConfig::new(Arc::clone(&store))
         .file_provider(settings.file_model.clone())
-        .dir_provider(settings.dir_model.clone());
+        .dir_provider(settings.dir_model.clone())
+        .review_provider(settings.review_model.clone())
+        .pr_provider(settings.pr_model.clone());
     if let Some(tokens) = settings.file_max_tokens {
         explain = explain.file_max_tokens(tokens);
     }
     if let Some(tokens) = settings.dir_max_tokens {
         explain = explain.dir_max_tokens(tokens);
+    }
+    if let Some(tokens) = settings.review_max_tokens {
+        explain = explain.review_max_tokens(tokens);
+    }
+    if let Some(tokens) = settings.pr_max_tokens {
+        explain = explain.pr_max_tokens(tokens);
+    }
+    if let Some(label) = &settings.review_model_label {
+        explain = explain.review_model_label(label.clone());
+    }
+    if let Some(label) = &settings.pr_model_label {
+        explain = explain.pr_model_label(label.clone());
     }
 
     Browse {

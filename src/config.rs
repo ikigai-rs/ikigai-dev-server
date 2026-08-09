@@ -25,6 +25,12 @@
 //! browse.dir_model = "ask"                     # explain dir rollup ("ask" = urn:llm:ask)
 //! browse.file_max_tokens = 400                 # explain ceilings (the crate's defaults shown)
 //! browse.dir_max_tokens = 600
+//! browse.review_model = "coder"                # review pass (urn:repo:{repo}:review:{path})
+//! browse.review_max_tokens = 800               # review ceiling (findings carry quotes)
+//! browse.pr_model = "coder"                    # pull-request explain (the PR family)
+//! browse.pr_max_tokens = 600
+//! browse.review_model_label = "qwen3:30b"      # operator overrides folded into version tags;
+//! browse.pr_model_label = "qwen3:30b"          # unset, the true model id resolves at derive time
 //! ```
 //!
 //! No `browse.root` line and no `--root` flag ⇒ **no browse family at all** —
@@ -49,6 +55,12 @@ ikigai-dev [socket] [flags]
   --dir-model <id>          explain dir rollup, same spellings
   --file-max-tokens <n>     explain ceilings (defaults: 400 file, 600 dir)
   --dir-max-tokens <n>
+  --review-model <id>       review pass (urn:repo:{repo}:review:{path}), same spellings
+  --pr-model <id>           pull-request explain, same spellings
+  --review-max-tokens <n>   review/pr ceilings (defaults: 800 review, 600 pr)
+  --pr-max-tokens <n>
+  --review-model-label <s>  operator overrides folded into version tags (unset, the
+  --pr-model-label <s>      true model id resolves at derive time)
   --help
 
 Config file grammar (flags override it):
@@ -59,6 +71,12 @@ Config file grammar (flags override it):
   browse.dir_model = \"ask\"
   browse.file_max_tokens = 400
   browse.dir_max_tokens = 600
+  browse.review_model = \"coder\"
+  browse.review_max_tokens = 800
+  browse.pr_model = \"coder\"
+  browse.pr_max_tokens = 600
+  browse.review_model_label = \"qwen3:30b\"
+  browse.pr_model_label = \"qwen3:30b\"
 ";
 
 /// Root names the browse grammar must not claim: `ikigai-repo` (also linked
@@ -90,9 +108,22 @@ pub struct BrowseSettings {
     pub file_model: String,
     /// Provider IRI for the explain directory rollup.
     pub dir_model: String,
+    /// Provider IRI for the review pass.
+    pub review_model: String,
+    /// Provider IRI for the pull-request explain.
+    pub pr_model: String,
     /// Explain ceilings; `None` keeps the crate's defaults (400 / 600).
     pub file_max_tokens: Option<u32>,
     pub dir_max_tokens: Option<u32>,
+    /// Review / pr-explain ceilings; `None` keeps the crate's defaults
+    /// (800 / 600).
+    pub review_max_tokens: Option<u32>,
+    pub pr_max_tokens: Option<u32>,
+    /// Operator overrides folded into review / pr version tags; `None` (the
+    /// default) resolves the true model identity through the kernel at
+    /// derivation time, so a model swap re-keys the archive by itself.
+    pub review_model_label: Option<String>,
+    pub pr_model_label: Option<String>,
 }
 
 /// Read the real command line and the real config file. Exits on `--help`.
@@ -147,8 +178,14 @@ struct Flags {
     store: Option<String>,
     file_model: Option<String>,
     dir_model: Option<String>,
+    review_model: Option<String>,
+    pr_model: Option<String>,
     file_max_tokens: Option<String>,
     dir_max_tokens: Option<String>,
+    review_max_tokens: Option<String>,
+    pr_max_tokens: Option<String>,
+    review_model_label: Option<String>,
+    pr_model_label: Option<String>,
 }
 
 impl Flags {
@@ -176,6 +213,22 @@ impl Flags {
                 "--dir-max-tokens" => {
                     flags.dir_max_tokens = Some(next_value(&mut args, "--dir-max-tokens"));
                 }
+                "--review-model" => {
+                    flags.review_model = Some(next_value(&mut args, "--review-model"));
+                }
+                "--pr-model" => flags.pr_model = Some(next_value(&mut args, "--pr-model")),
+                "--review-max-tokens" => {
+                    flags.review_max_tokens = Some(next_value(&mut args, "--review-max-tokens"));
+                }
+                "--pr-max-tokens" => {
+                    flags.pr_max_tokens = Some(next_value(&mut args, "--pr-max-tokens"));
+                }
+                "--review-model-label" => {
+                    flags.review_model_label = Some(next_value(&mut args, "--review-model-label"));
+                }
+                "--pr-model-label" => {
+                    flags.pr_model_label = Some(next_value(&mut args, "--pr-model-label"));
+                }
                 other if other.starts_with('-') => {
                     panic!("ikigai-dev: unknown flag {other}\n\n{USAGE}")
                 }
@@ -199,8 +252,14 @@ impl Flags {
             || self.store.is_some()
             || self.file_model.is_some()
             || self.dir_model.is_some()
+            || self.review_model.is_some()
+            || self.pr_model.is_some()
             || self.file_max_tokens.is_some()
             || self.dir_max_tokens.is_some()
+            || self.review_max_tokens.is_some()
+            || self.pr_max_tokens.is_some()
+            || self.review_model_label.is_some()
+            || self.pr_model_label.is_some()
     }
 }
 
@@ -262,6 +321,20 @@ fn merge(flags: &Flags, text: &str) -> Settings {
                     .or_else(|| value_for(text, "browse.dir_model"))
                     .unwrap_or_else(|| "ask".to_string()),
             ),
+            review_model: provider_iri(
+                &flags
+                    .review_model
+                    .clone()
+                    .or_else(|| value_for(text, "browse.review_model"))
+                    .unwrap_or_else(|| "coder".to_string()),
+            ),
+            pr_model: provider_iri(
+                &flags
+                    .pr_model
+                    .clone()
+                    .or_else(|| value_for(text, "browse.pr_model"))
+                    .unwrap_or_else(|| "coder".to_string()),
+            ),
             file_max_tokens: ceiling(
                 "browse.file_max_tokens",
                 flags
@@ -276,6 +349,28 @@ fn merge(flags: &Flags, text: &str) -> Settings {
                     .clone()
                     .or_else(|| value_for(text, "browse.dir_max_tokens")),
             ),
+            review_max_tokens: ceiling(
+                "browse.review_max_tokens",
+                flags
+                    .review_max_tokens
+                    .clone()
+                    .or_else(|| value_for(text, "browse.review_max_tokens")),
+            ),
+            pr_max_tokens: ceiling(
+                "browse.pr_max_tokens",
+                flags
+                    .pr_max_tokens
+                    .clone()
+                    .or_else(|| value_for(text, "browse.pr_max_tokens")),
+            ),
+            review_model_label: flags
+                .review_model_label
+                .clone()
+                .or_else(|| value_for(text, "browse.review_model_label")),
+            pr_model_label: flags
+                .pr_model_label
+                .clone()
+                .or_else(|| value_for(text, "browse.pr_model_label")),
         })
     };
 
@@ -478,6 +573,82 @@ mod tests {
         assert_eq!(browse.dir_model, "urn:llm:ask");
         assert!(browse.store.ends_with(".ikigai/browse-store"));
         assert!(browse.file_max_tokens.is_none());
+        assert_eq!(browse.review_model, "urn:llm:coder:ask");
+        assert_eq!(browse.pr_model, "urn:llm:coder:ask");
+        assert!(browse.review_max_tokens.is_none());
+        assert!(browse.pr_max_tokens.is_none());
+        assert!(browse.review_model_label.is_none());
+        assert!(browse.pr_model_label.is_none());
+    }
+
+    /// The review / pr knobs read from the file with the same spellings as the
+    /// file/dir tiers: model ids map through `provider_iri`, labels pass
+    /// through verbatim, ceilings parse.
+    #[test]
+    fn review_and_pr_knobs_flow_through() {
+        let dir = std::env::temp_dir().join("ikigai-dev-test-root");
+        std::fs::create_dir_all(&dir).unwrap();
+        let flags = Flags {
+            roots: vec![dir.to_string_lossy().into_owned()],
+            ..Flags::default()
+        };
+        let text = "browse.review_model = \"mlx\"\n\
+                    browse.review_model_label = \"qwen3-coder:30b\"\n\
+                    browse.review_max_tokens = 1600\n\
+                    browse.pr_model = \"urn:llm:big:ask\"\n\
+                    browse.pr_max_tokens = 900\n";
+        let browse = merge(&flags, text).browse.expect("browse configured");
+        assert_eq!(browse.review_model, "urn:llm:mlx:ask");
+        assert_eq!(
+            browse.review_model_label.as_deref(),
+            Some("qwen3-coder:30b")
+        );
+        assert_eq!(browse.review_max_tokens, Some(1600));
+        assert_eq!(browse.pr_model, "urn:llm:big:ask");
+        assert!(browse.pr_model_label.is_none());
+        assert_eq!(browse.pr_max_tokens, Some(900));
+    }
+
+    /// The review/pr flags override their file lines like every other knob.
+    #[test]
+    fn review_and_pr_flags_override_the_file() {
+        let dir = std::env::temp_dir().join("ikigai-dev-test-root");
+        std::fs::create_dir_all(&dir).unwrap();
+        let flags = Flags {
+            roots: vec![dir.to_string_lossy().into_owned()],
+            review_max_tokens: Some("2000".to_string()),
+            pr_model_label: Some("pinned".to_string()),
+            ..Flags::default()
+        };
+        let text = "browse.review_max_tokens = 800\nbrowse.pr_model_label = \"file\"\n";
+        let browse = merge(&flags, text).browse.expect("browse configured");
+        assert_eq!(browse.review_max_tokens, Some(2000));
+        assert_eq!(browse.pr_model_label.as_deref(), Some("pinned"));
+    }
+
+    /// The new ceilings get the same set-but-garbage loudness as the old ones.
+    #[test]
+    #[should_panic(expected = "not a number")]
+    fn garbage_review_ceiling_is_refused() {
+        let dir = std::env::temp_dir();
+        let flags = Flags {
+            roots: vec![dir.to_string_lossy().into_owned()],
+            review_max_tokens: Some("plenty".to_string()),
+            ..Flags::default()
+        };
+        merge(&flags, "");
+    }
+
+    /// A review/pr tuning is browse intent too: without a root it is the same
+    /// half-configuration as the older knobs.
+    #[test]
+    #[should_panic(expected = "no browse.root")]
+    fn review_tuning_without_a_root_is_refused() {
+        let flags = Flags {
+            pr_max_tokens: Some("900".to_string()),
+            ..Flags::default()
+        };
+        merge(&flags, "");
     }
 
     /// A reserved root name (ikigai-repo's URN segment) is refused loud.
