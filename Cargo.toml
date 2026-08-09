@@ -25,7 +25,7 @@ ikigai-browse = "0.2.2"     # urn:repo:{repo}:tree/file/…/explain + urn:annota
 ikigai-llm = "0.10"         # urn:llm:* — the explain seam's derivation engine (Registry::from_json)
 ikigai-http = "0.1.7"       # HttpTransport; 0.1.7 = the endpoint-follows-redirects contract our impl obeys
 ikigai-throttle = "0.1.0"   # RateLimit overlay around the exec + llm seams
-ikigai-ipc = "0.1.9"        # serve over a Unix socket
+ikigai-ipc = "0.1.10"       # serve over a Unix socket (wire-v6 hello; a v7 client refuses pre-hello servers)
 ikigai-vocab = "0.1.33"     # the Turtle meta renderer (describe / catalog)
 # The persistence switch for the shared browse/sparql store: ikigai-browse and
 # ikigai-sparql both keep oxigraph at default-features = false (no storage
