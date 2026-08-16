@@ -88,7 +88,17 @@ pub fn wire(settings: &BrowseSettings) -> Browse {
     }
 
     Browse {
-        space: ikigai_browse::space_with_explain(settings.roots.clone(), explain),
+        // `.app("dev-server")` is what makes the a11y layering mean anything here:
+        // without it the mount reads only the machine-wide `a11y.toml`, and a
+        // `dev-server.a11y.toml` override would sit on disk doing nothing — the
+        // quietest kind of wrong, since the file exists and is simply never
+        // consulted. The name is this PROCESS's identity, which is why the
+        // library takes it at mount time rather than per request: a caller does
+        // not get to choose whose accessibility settings apply.
+        space: ikigai_browse::Mount::new(settings.roots.clone())
+            .explain(explain)
+            .app("dev-server")
+            .space(),
         store,
     }
 }
