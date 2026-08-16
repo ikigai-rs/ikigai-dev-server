@@ -21,7 +21,7 @@ ikigai-core = "0.1.49"      # 0.1.49 = kernel-enforced declared requires (ikigai
 ikigai-repo = "0.1.0"       # urn:system:exec + urn:repo:* (the dev seam)
 ikigai-rdf = "0.1.4"        # urn:rdf:* (graph ops)
 ikigai-sparql = "0.1.6"     # urn:sparql:*; 0.1.6 = space_with_store + load_vocabulary (the shared-store seam)
-ikigai-browse = "0.2.11"    # urn:repo:{repo}:tree/file/…/explain/review + urn:annotation:* + the PR family; 0.2.6 = review_* (0.2.5) and pr_* (0.2.6) ExplainConfig knobs we wire. 0.2.11 is a RENDERING floor rather than an API one: below it urn:repo:style leaks the light theme's rules into dark mode (a media query carries no specificity), and parameters render at 1.03:1 — invisible. Stated so a stale cached index cannot resolve back to it.
+ikigai-browse = "0.2.12"    # urn:repo:{repo}:tree/file/…/explain/review + urn:annotation:* + the PR family; 0.2.6 = review_* (0.2.5) and pr_* (0.2.6) ExplainConfig knobs we wire. 0.2.12 is the a11y floor: urn:repo:style reads its themes and contrast floor from the layered a11y.toml and lifts every sub-floor colour to the theme's own foreground. Below 0.2.11 it also leaked the light theme into dark mode, rendering parameters at 1.03:1. Stated so a stale cached index cannot resolve back past either.
 ikigai-llm = "0.10"         # urn:llm:* — the explain seam's derivation engine (Registry::from_json)
 ikigai-http = "0.1.7"       # HttpTransport; 0.1.7 = the endpoint-follows-redirects contract our impl obeys
 ikigai-throttle = "0.1.0"   # RateLimit overlay around the exec + llm seams
