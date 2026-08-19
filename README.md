@@ -53,7 +53,23 @@ browse.pr_model = "coder"                    # pull-request explain (the PR fami
 browse.pr_max_tokens = 600
 browse.review_model_label = "qwen3:30b"      # operator overrides folded into version tags;
 browse.pr_model_label = "qwen3:30b"          # unset, the true model id resolves at derive time
+browse.allow_model = "big"                   # ALSO selectable by an explain `provider=`
+browse.allow_model = "ollama"                # (repeatable; same spellings; default: none)
 ```
+
+`browse.allow_model` is the only key here that grants reach rather than tuning
+it. Browse's explain takes `provider={iri}` — derive THIS explanation against a
+named backend — and the option menu beside the explain button offers exactly the
+set this host accepts: the two configured tiers (`file_model`, `dir_model`) plus
+whatever is allow-listed. Anything else is `Denied`, never a silent fall back.
+The list is the **operator's** because `explain` declares one capability
+(`urn:cap:net:*`) and a capability cannot vary by argument value — it says "may
+derive", not "may derive against the metered vendor" — so a request argument must
+not be able to spend on the operator's behalf. Unset, the menu offers the two
+tiers alone and this server behaves exactly as it did before the key existed.
+Configuring the review or PR provider does **not** widen the set: those derive
+other actions, and granting explain authority as a side effect of an unrelated
+line is the surprise this key exists to avoid.
 
 No `browse.root` ⇒ no browse family at all (and no `urn:llm:*`) — the original
 curated surface, unchanged. A `browse.*` tuning **without** a root fails loud at
