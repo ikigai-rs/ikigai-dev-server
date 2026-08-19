@@ -31,7 +31,24 @@
 //! browse.pr_max_tokens = 600
 //! browse.review_model_label = "qwen3:30b"      # operator overrides folded into version tags;
 //! browse.pr_model_label = "qwen3:30b"          # unset, the true model id resolves at derive time
+//! browse.allow_model = "big"                   # ALSO selectable by an explain `provider=`
+//! browse.allow_model = "ollama"                # (repeatable; same spellings; default: none)
 //! ```
+//!
+//! `browse.allow_model` is the one key here that is not a tuning but an
+//! **authority** decision, so it is worth saying why it exists. Browse's
+//! explain takes `provider={iri}` — derive THIS explanation against a named
+//! backend — and the option menu beside the explain button offers exactly the
+//! set this host will accept: the two configured tiers (`file_model`,
+//! `dir_model`) plus whatever the host allow-lists. Anything else is `Denied`,
+//! never a silent fall back. It must be the OPERATOR's list rather than the
+//! caller's argument because `explain` declares one capability
+//! (`urn:cap:net:*`) and a capability cannot vary by argument value: it says
+//! "may derive", never "may derive against the metered vendor". So every
+//! provider named here is one that any caller who may explain at all may point
+//! this host at — add a backend when you would be content to pay for it.
+//! Empty by default: an unconfigured server offers the two tiers and nothing
+//! more, exactly as before the key existed.
 //!
 //! No `browse.root` line and no `--root` flag ⇒ **no browse family at all** —
 //! absence, not error: the module is opt-in and an unconfigured server must
@@ -61,6 +78,8 @@ ikigai-dev [socket] [flags]
   --pr-max-tokens <n>
   --review-model-label <s>  operator overrides folded into version tags (unset, the
   --pr-model-label <s>      true model id resolves at derive time)
+  --allow-model <id>        ALSO selectable by an explain `provider=` request; same
+                            spellings (repeatable; overrides ALL browse.allow_model lines)
   --help
 
 Config file grammar (flags override it):
@@ -77,6 +96,7 @@ Config file grammar (flags override it):
   browse.pr_max_tokens = 600
   browse.review_model_label = \"qwen3:30b\"
   browse.pr_model_label = \"qwen3:30b\"
+  browse.allow_model = \"big\"                     # repeatable; default: none
 ";
 
 /// Root names the browse grammar must not claim: `ikigai-repo` (also linked
@@ -124,6 +144,22 @@ pub struct BrowseSettings {
     /// derivation time, so a model swap re-keys the archive by itself.
     pub review_model_label: Option<String>,
     pub pr_model_label: Option<String>,
+    /// Provider IRIs an explain REQUEST may name with `provider=`, on top of
+    /// the two tiers browse always makes selectable. Empty by default, so the
+    /// menu offers `file_model` and `dir_model` alone — what this server
+    /// offered before the knob existed.
+    ///
+    /// ★ An authority list, not a tuning. `explain` declares `urn:cap:net:*`
+    /// and an `ActionSpec` cannot express a capability that varies by argument
+    /// value, so the cap means "may derive", not "may derive against the
+    /// metered vendor": the operator names which backends a caller may spend,
+    /// and browse republishes the set as the `provider` ArgSpec's `one_of` so
+    /// the manifold states it. The review and PR providers are deliberately
+    /// NOT folded in — those are the models this host derives two OTHER
+    /// actions with, and making `browse.review_model` widen explain's
+    /// selectable set would grant reach as a side effect of an unrelated line.
+    /// An operator who wants one offered names it here.
+    pub allow_models: Vec<String>,
 }
 
 /// Read the real command line and the real config file. Exits on `--help`.
@@ -186,6 +222,7 @@ struct Flags {
     pr_max_tokens: Option<String>,
     review_model_label: Option<String>,
     pr_model_label: Option<String>,
+    allow_models: Vec<String>,
 }
 
 impl Flags {
@@ -229,6 +266,9 @@ impl Flags {
                 "--pr-model-label" => {
                     flags.pr_model_label = Some(next_value(&mut args, "--pr-model-label"));
                 }
+                "--allow-model" => flags
+                    .allow_models
+                    .push(next_value(&mut args, "--allow-model")),
                 other if other.starts_with('-') => {
                     panic!("ikigai-dev: unknown flag {other}\n\n{USAGE}")
                 }
@@ -260,6 +300,7 @@ impl Flags {
             || self.pr_max_tokens.is_some()
             || self.review_model_label.is_some()
             || self.pr_model_label.is_some()
+            || !self.allow_models.is_empty()
     }
 }
 
@@ -371,6 +412,21 @@ fn merge(flags: &Flags, text: &str) -> Settings {
                 .pr_model_label
                 .clone()
                 .or_else(|| value_for(text, "browse.pr_model_label")),
+            // Repeatable, so it takes `browse.root`'s override rule and not
+            // the single-valued knobs': the flags REPLACE the file's lines
+            // wholesale. Merging would leave an allowlist that can only grow —
+            // `--allow-model` could not take one of the file's backends back
+            // off — which is the wrong direction for the one key here that
+            // hands out reach.
+            allow_models: if flags.allow_models.is_empty() {
+                values_for(text, "browse.allow_model")
+            } else {
+                flags.allow_models.clone()
+            }
+            .iter()
+            .map(String::as_str)
+            .map(provider_iri)
+            .collect(),
         })
     };
 
@@ -579,6 +635,7 @@ mod tests {
         assert!(browse.pr_max_tokens.is_none());
         assert!(browse.review_model_label.is_none());
         assert!(browse.pr_model_label.is_none());
+        assert!(browse.allow_models.is_empty());
     }
 
     /// The review / pr knobs read from the file with the same spellings as the
@@ -659,6 +716,63 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let flags = Flags {
             roots: vec![dir.to_string_lossy().into_owned()],
+            ..Flags::default()
+        };
+        merge(&flags, "");
+    }
+
+    /// `browse.allow_model` repeats like `browse.root` and spells providers
+    /// like the tier keys: an id becomes `urn:llm:{id}:ask`, `ask` is the
+    /// facade, a full IRI passes through. Unset it is EMPTY — the tiers alone,
+    /// which is what this server offered before the key existed.
+    #[test]
+    fn allow_models_read_from_the_file() {
+        let dir = std::env::temp_dir().join("ikigai-dev-test-root");
+        std::fs::create_dir_all(&dir).unwrap();
+        let flags = Flags {
+            roots: vec![dir.to_string_lossy().into_owned()],
+            ..Flags::default()
+        };
+        assert!(merge(&flags, "")
+            .browse
+            .expect("browse configured")
+            .allow_models
+            .is_empty());
+
+        let text = "browse.allow_model = \"big\"\n\
+                    browse.allow_model = \"ask\"\n\
+                    browse.allow_model = \"urn:llm:mlx:ask\"\n";
+        let browse = merge(&flags, text).browse.expect("browse configured");
+        assert_eq!(
+            browse.allow_models,
+            ["urn:llm:big:ask", "urn:llm:ask", "urn:llm:mlx:ask"]
+        );
+    }
+
+    /// The flag REPLACES the file's lines rather than merging with them — the
+    /// `browse.root` rule, for the same reason: an allowlist that could only
+    /// grow would give the command line no way to take a backend back off.
+    #[test]
+    fn allow_model_flags_replace_the_file_lines() {
+        let dir = std::env::temp_dir().join("ikigai-dev-test-root");
+        std::fs::create_dir_all(&dir).unwrap();
+        let flags = Flags {
+            roots: vec![dir.to_string_lossy().into_owned()],
+            allow_models: vec!["mlx".to_string()],
+            ..Flags::default()
+        };
+        let text = "browse.allow_model = \"big\"\nbrowse.allow_model = \"ollama\"\n";
+        let browse = merge(&flags, text).browse.expect("browse configured");
+        assert_eq!(browse.allow_models, ["urn:llm:mlx:ask"]);
+    }
+
+    /// An allowlist with no root is browse intent like every other knob: the
+    /// same loud half-configuration rather than a silently browse-less server.
+    #[test]
+    #[should_panic(expected = "no browse.root")]
+    fn allow_model_without_a_root_is_refused() {
+        let flags = Flags {
+            allow_models: vec!["big".to_string()],
             ..Flags::default()
         };
         merge(&flags, "");

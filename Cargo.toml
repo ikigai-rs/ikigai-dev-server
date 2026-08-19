@@ -1,7 +1,7 @@
 [package]
 name = "ikigai-dev-server"
 description = "A standalone, linkage-gated ikigai server for development tooling: git/gh/cargo + graphs + the browse family (persistent explanations/annotations), exec and llm rate-limited, over IPC."
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 authors = ["Brian Sletten <brian.sletten@gmail.com>"]
@@ -21,7 +21,7 @@ ikigai-core = "0.1.49"      # 0.1.49 = kernel-enforced declared requires (ikigai
 ikigai-repo = "0.1.0"       # urn:system:exec + urn:repo:* (the dev seam)
 ikigai-rdf = "0.1.4"        # urn:rdf:* (graph ops)
 ikigai-sparql = "0.1.6"     # urn:sparql:*; 0.1.6 = space_with_store + load_vocabulary (the shared-store seam)
-ikigai-browse = "0.2.12"    # urn:repo:{repo}:tree/file/…/explain/review + urn:annotation:* + the PR family; 0.2.6 = review_* (0.2.5) and pr_* (0.2.6) ExplainConfig knobs we wire. 0.2.12 is the a11y floor: urn:repo:style reads its themes and contrast floor from the layered a11y.toml and lifts every sub-floor colour to the theme's own foreground. Below 0.2.11 it also leaked the light theme into dark mode, rendering parameters at 1.03:1. Stated so a stale cached index cannot resolve back past either.
+ikigai-browse = "0.2.14"    # urn:repo:{repo}:tree/file/…/explain/review + urn:annotation:* + the PR family; 0.2.6 = review_* (0.2.5) and pr_* (0.2.6) ExplainConfig knobs we wire. 0.2.12 is the a11y floor: urn:repo:style reads its themes and contrast floor from the layered a11y.toml and lifts every sub-floor colour to the theme's own foreground. Below 0.2.11 it also leaked the light theme into dark mode, rendering parameters at 1.03:1. Stated so a stale cached index cannot resolve back past either. 0.2.14 raises the floor again and BOTH of those reasons still hold: 0.2.13 added `provider={iri}` on explain plus the `allow_provider`/`allow_providers` allowlist we feed from `browse.allow_model`, and 0.2.14 added the option menu beside the explain button — its panel resolves `urn:llm:models` once per open, which this binary binds because llm.rs mounts the whole ikigai-llm space alongside browse. 0.2.13 never reached crates.io, so 0.2.14 is the first released version carrying `provider=` at all.
 ikigai-llm = "0.10"         # urn:llm:* — the explain seam's derivation engine (Registry::from_json)
 ikigai-http = "0.1.7"       # HttpTransport; 0.1.7 = the endpoint-follows-redirects contract our impl obeys
 ikigai-throttle = "0.1.0"   # RateLimit overlay around the exec + llm seams
