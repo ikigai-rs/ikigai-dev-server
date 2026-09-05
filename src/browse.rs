@@ -10,8 +10,17 @@
 //! # in the MAIN host's ~/.config/ikigai/config.toml (two lines because the
 //! # family spans two URN prefixes):
 //! mount = "prefer urn:repo:=~/.ikigai/dev.sock"
-//! mount = "prefer urn:annotation:=~/.ikigai/dev.sock"
+//! mount = "prefer urn:iki:annotation=~/.ikigai/dev.sock"
 //! ```
+//!
+//! ⚠ The annotation line has NO trailing colon, deliberately. Mounts match
+//! by plain string prefix, and `urn:iki:annotation` covers both the slug
+//! family (`urn:iki:annotation:{id}`) AND the bare `urn:iki:annotation`
+//! that a Sink mints under — which is the only write path the browse
+//! overlay has. Written `urn:iki:annotation:=`, every new annotation would
+//! fail to route, silently and only on the machines that mount rather than
+//! bind. (This crate BINDS the family in-process; the mount lines are for
+//! every other process, here and on any host that reaches this socket.)
 //!
 //! The default store path is `~/.ikigai/browse-store` — the SAME default the
 //! cli's serving instance used, deliberately: the archive already derived on a
@@ -54,7 +63,7 @@ pub fn wire(settings: &BrowseSettings) -> Browse {
              (e.g. a main-host serve instance with `serve.browse.root` lines), move \
              browse ownership HERE: drop those lines and prefer-mount this server \
              instead — mount = \"prefer urn:repo:=<this socket>\" and \
-             mount = \"prefer urn:annotation:=<this socket>\". Otherwise fix the \
+             mount = \"prefer urn:iki:annotation=<this socket>\". Otherwise fix the \
              path/permissions.",
             settings.store.display()
         )
@@ -194,6 +203,44 @@ mod tests {
             .expect("explain publishes a `provider` ArgSpec")
             .one_of
             .clone()
+    }
+
+    /// The annotation family answers under `urn:iki:annotation:` and NOT under
+    /// the pre-0.3.0 `urn:annotation:` — the name this server puts on the wire.
+    ///
+    /// Worth a test here rather than trusting ikigai-browse's own suite: that
+    /// suite writes and reads through the same code, so both halves move
+    /// together and it cannot see a namespace change at all. The evidence that
+    /// matters is at the process boundary, and this is the process that serves
+    /// it. Deliberately asserting the negative too: this server installs no
+    /// alias table (see the Cargo.toml note), so an old-spelling request must
+    /// miss rather than quietly work here and break the moment the mount line
+    /// on some other host is the thing being debugged.
+    #[test]
+    fn the_annotation_family_binds_the_canonical_name_only() {
+        let root = std::env::temp_dir().join("ikigai-dev-annotation-test");
+        std::fs::create_dir_all(&root).expect("temp root");
+        let settings = settings(root, &[]);
+        let store = Arc::new(Store::new().expect("in-memory store"));
+        let space = ikigai_browse::Mount::new(settings.roots.clone())
+            .explain(explain_config(&settings, &store))
+            .app("dev-server")
+            .space();
+
+        for iri in ["urn:iki:annotation", "urn:iki:annotation:note-1"] {
+            let request = Request::new(Verb::Sink, Iri::parse(iri).expect("iri"));
+            assert!(
+                matches!(space.resolve(&request, &Scope::empty()), Resolution::Hit(_)),
+                "{iri} must resolve"
+            );
+        }
+        for iri in ["urn:annotation", "urn:annotation:note-1"] {
+            let request = Request::new(Verb::Sink, Iri::parse(iri).expect("iri"));
+            assert!(
+                !matches!(space.resolve(&request, &Scope::empty()), Resolution::Hit(_)),
+                "{iri} is the pre-0.3.0 name and nothing here aliases it"
+            );
+        }
     }
 
     /// Unconfigured, the menu offers exactly the two tiers this server already

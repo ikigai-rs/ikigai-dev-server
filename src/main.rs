@@ -3,7 +3,7 @@
 //! The Cargo.toml is the module manifest: this binary composes a *curated*
 //! space — the dev seam (`urn:system:exec`, `urn:repo:*`) plus graph ops
 //! (`urn:rdf:*`, `urn:sparql:*`), and, when configured, the **browse family**
-//! (`urn:repo:{repo}:tree/file/state/hash/explain/…` + `urn:annotation:*`)
+//! (`urn:repo:{repo}:tree/file/state/hash/explain/…` + `urn:iki:annotation:*`)
 //! with its persistent explanation/annotation store — and serves it over a
 //! Unix socket. It does NOT link EventKit or the calendar, so their code (and
 //! any flaw in it) is simply not present.
@@ -15,7 +15,8 @@
 //! Decision of record: **this server owns the browse store on a machine** —
 //! the store takes an exclusive lock, so one process serves the family and
 //! every other process prefer-mounts this socket (`mount = "prefer
-//! urn:repo:=~/.ikigai/dev.sock"` + the `urn:annotation:` twin). That is why
+//! urn:repo:=~/.ikigai/dev.sock"` + the `urn:iki:annotation` twin — no
+//! trailing colon, so it also covers the bare minting IRI). That is why
 //! the default socket moved from `$TMPDIR` (which churns across reboots) to
 //! the stable `~/.ikigai/dev.sock` mounts can name.
 //!

@@ -17,7 +17,7 @@ ikigai-dev --help                # flags + the config-file grammar
 | `urn:system:exec`, `urn:repo:*` | `ikigai-repo` — git/gh/cargo as capability-gated resources |
 | `urn:rdf:*` | `ikigai-rdf` — graph union/diff/transrept |
 | `urn:sparql:*` | `ikigai-sparql` — query |
-| `urn:repo:{repo}:tree/file/state/hash/explain/…`, `urn:annotation:*` | `ikigai-browse` — the browse family, **when configured** (see below) |
+| `urn:repo:{repo}:tree/file/state/hash/explain/…`, `urn:iki:annotation:*` | `ikigai-browse` — the browse family, **when configured** (see below) |
 | `urn:llm:*` | `ikigai-llm` — the explain seam's derivation engine, mounted **only alongside browse** |
 
 Run it *in* a project directory and it serves that project's git state
@@ -83,8 +83,42 @@ Every other process on the machine reaches the family through this socket
 
 ```toml
 mount = "prefer urn:repo:=~/.ikigai/dev.sock"
-mount = "prefer urn:annotation:=~/.ikigai/dev.sock"
+mount = "prefer urn:iki:annotation=~/.ikigai/dev.sock"
 ```
+
+⚠ The annotation line carries **no trailing colon**, deliberately. Mounts
+match by plain string prefix, and `urn:iki:annotation` covers the slug family
+(`urn:iki:annotation:{id}`) *and* the bare `urn:iki:annotation` a Sink mints
+under — the only write path the browse overlay has. Written
+`urn:iki:annotation:=`, reads keep working and every new annotation silently
+fails to route.
+
+### Upgrading a pre-0.3.0 store
+
+`ikigai-browse` 0.3.0 moved the annotation namespace from `urn:annotation:`
+to `urn:iki:annotation:`. **A store written before that upgrade does not
+migrate itself, and the failure is silent**: browse's listing paths
+(`list_annotations`, `list_annotations_for_target`, `included_for_ids`)
+`strip_prefix` the *stored subject IRI*, so an old-prefix annotation is
+skipped rather than erroring — the panel comes back empty and nothing says
+why. Review passes lose their minted findings the same way, through the
+`prov:generated` objects that name them.
+
+Count what a store holds before upgrading (this query runs over the store
+this process owns, so ask it through the socket rather than opening the
+RocksDB directory yourself — the lock is exclusive):
+
+```sh
+ikigai --connect ~/.ikigai/dev.sock --plain -c \
+  'source urn:sparql:select query="SELECT (COUNT(*) AS ?c) WHERE { ?s ?p ?o . FILTER(STRSTARTS(STR(?s), \"urn:annotation:\")) }"'
+```
+
+A non-zero count means a one-time rename is owed, in three positions that
+must all move together: annotation subjects, their `:selector:quote` /
+`:selector:position` children, and every IRI *object* naming one
+(`oa:hasSelector`, `prov:generated`). That is an operator step with this
+server stopped — the store takes an exclusive lock, so nothing can rewrite
+it while the socket is up.
 
 The LLM provider registry is the shared `~/.config/ikigai/llm.json` (absent ⇒
 a local Ollama default; present-but-unparseable ⇒ loud).
