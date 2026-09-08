@@ -22,18 +22,61 @@ path = "src/main.rs"
 # aren't compiled in. Linkage-gating, not config-gating. (ikigai-llm IS linked,
 # deliberately — an outbound HTTP client to local inference, not the
 # EventKit/TCC class the gating exists for; see src/llm.rs for the argument.)
+# ★ EVERY FLOOR BELOW IS A TRUE MINIMUM, established by unpacking the published
+# crates and finding the earliest version that carries the item this binary
+# actually uses — not by starting at 0.1.0 and letting the caret sort it out.
+# That distinction is not pedantry here. This manifest IS the module manifest,
+# so a floor states what the server can SERVE, and `^` makes a too-low floor
+# unfalsifiable: a lock already holding the old version satisfies it, cargo says
+# nothing, and the gap surfaces only when something at RUNTIME asks for the
+# resource that was never there. It cost two days of dead pull requests in the
+# reading room (see ikigai-repo). A pin too HIGH fails instantly and locally; a
+# pin too LOW is silent until it isn't. Only the low direction needs a rule.
+#
 # 0.1.56 is the true floor of this build, and it is not OURS: what this binary
 # itself reaches for is still the 0.1.49 baseline (kernel-enforced declared
-# `requires`). ikigai-browse 0.3.0 pins 0.1.56 — `ikigai-a11y` 0.2.1 needs
-# `config::config_home` / `layered_paths_in` — so Cargo can never resolve this
-# graph lower. A pin naming a version the graph cannot satisfy describes a
-# build nobody has, so it states the real floor.
+# `requires`). ikigai-browse 0.3.0 pins `ikigai-core` 0.1.56 outright, and so
+# does `ikigai-a11y` 0.2.1 beneath it (`config::config_home` /
+# `layered_paths_in`), so Cargo can never resolve this graph lower. A pin naming
+# a version the graph cannot satisfy describes a build nobody has, so it states
+# the real floor.
 # ⚠ Deliberately NOT 0.1.63, where `Kernel::with_aliases` arrived: this server
 # installs no alias table. See the ikigai-browse note below for the argument.
 ikigai-core = "0.1.56"
-ikigai-repo = "0.1.0"       # urn:system:exec + urn:repo:* (the dev seam)
-ikigai-rdf = "0.1.4"        # urn:rdf:* (graph ops)
-ikigai-sparql = "0.1.6"     # urn:sparql:*; 0.1.6 = space_with_store + load_vocabulary (the shared-store seam)
+# urn:system:exec + urn:repo:* (the dev seam). ★ 0.1.5, and the four versions
+# between it and the old `0.1.0` floor are the whole PR family:
+#   0.1.3  urn:repo:pr:list, urn:repo:pr:diff   (absent in 0.1.2)
+#   0.1.4  state= on the listing
+#   0.1.5  urn:repo:pr:files, and path= on urn:repo:log
+# ikigai-browse 0.3.0 does NOT depend on this crate at compile time — it
+# resolves those facades THROUGH THE KERNEL at runtime, out of whatever space
+# this manifest composed. So nothing in the dependency graph forces the version
+# up, and `^0.1.0` was satisfied by a local lock holding 0.1.2. The binary
+# installed from that lock served `urn:repo:{repo}:prs` and then failed inside
+# it — "`urn:repo:pr:list` did not resolve" — for two days (2026-09-06→08),
+# misread first as network slowness and then as a missing mount. With a true
+# floor that lock could not have satisfied the manifest at all.
+# 0.1.5 rather than the 0.1.3 that would have fixed that specific error:
+# browse's SCOPED listing (`urn:repo:{repo}:prs:{path}`) intersects open PRs
+# through `urn:repo:pr:files` and mines merged ones from `urn:repo:log path=`.
+# Browse's own source names the requirement ("ikigai-repo >= 0.1.5"); the ArgSpec
+# `path` and the `pr:files` binding both appear first in 0.1.5 and in no earlier
+# published version.
+ikigai-repo = "0.1.5"
+# urn:rdf:* (graph ops). 0.1.3 first bound `urn:rdf:diff` and `urn:rdf:union`
+# beside `urn:rdf:transrept`, but 0.1.4 is the floor because of what it puts in
+# the MANIFOLD: it gives `urn:rdf:diff`'s `mode` an `one_of ["added","removed"]`
+# and a `default_value`, where 0.1.3 had only prose. This binary's whole client
+# surface is self-description over a socket, so an enumerated argument is a
+# served fact, not a docstring — it is what `urn:kernel:actions` narrows on and
+# what `urn:kernel:validate` pre-flights against.
+ikigai-rdf = "0.1.4"
+# urn:sparql:*. 0.1.6 exactly: `space_with_store`, `load_vocabulary`, and the
+# `pub use oxigraph::store::Store` re-export src/browse.rs holds — all three
+# appear first in 0.1.6 and none of them exists in 0.1.5. This is the
+# shared-store seam (main.rs joins the explanation archive and the annotations
+# into one graph), so nothing lower can even be typed.
+ikigai-sparql = "0.1.6"
 # 0.3.0 MOVES THE ANNOTATION NAMESPACE: `urn:annotation:` → `urn:iki:annotation:`
 # (the ecosystem-wide `urn:iki:` migration; a MINOR bump because a module
 # crate's resource NAMES are its public interface even with its Rust API
@@ -47,19 +90,92 @@ ikigai-sparql = "0.1.6"     # urn:sparql:*; 0.1.6 = space_with_store + load_voca
 #   alias wraps the ROOT, so the operator's `mount` lines sit inside it and
 #   have to be hand-edited in the same window either way.
 # * The a11y floor moves transitively — browse 0.3.0 pins `ikigai-a11y` 0.2.1
-#   (the lock held 0.1.0), which is what raises `ikigai-core` to 0.1.56 above.
-#   The `.app("dev-server")` layering in src/browse.rs is unaffected.
+#   (the lock held 0.1.0), and 0.2.1 pins `ikigai-core` 0.1.56, the same floor
+#   browse states outright. The `.app("dev-server")` layering in src/browse.rs
+#   is unaffected.
+# * 0.3.0 is therefore the true minimum here and not merely the current
+#   release: `urn:iki:annotation` appears in no earlier published version
+#   (0.2.15 and below bind `urn:annotation` only), and src/browse.rs has a test
+#   asserting this process puts the new name on the wire and NOT the old one.
 # * ⚠ STORED DATA DOES NOT MIGRATE ITSELF. Browse's listing paths
 #   `strip_prefix` the STORED subject IRI, so annotations minted under the old
 #   prefix are skipped rather than erroring — an empty list, not a failure.
 #   This server owns the store, so the one-time rename is an operator step in
 #   the same window; see README, "Upgrading a pre-0.3.0 store".
 ikigai-browse = "0.3.0"     # urn:repo:{repo}:tree/file/…/explain/review + urn:iki:annotation:* + the PR family; 0.2.6 = review_* (0.2.5) and pr_* (0.2.6) ExplainConfig knobs we wire. 0.2.12 is the a11y floor: urn:repo:style reads its themes and contrast floor from the layered a11y.toml and lifts every sub-floor colour to the theme's own foreground. Below 0.2.11 it also leaked the light theme into dark mode, rendering parameters at 1.03:1. Stated so a stale cached index cannot resolve back past either. 0.2.14 raises the floor again and BOTH of those reasons still hold: 0.2.13 added `provider={iri}` on explain plus the `allow_provider`/`allow_providers` allowlist we feed from `browse.allow_model`, and 0.2.14 added the option menu beside the explain button — its panel resolves `urn:llm:models` once per open, which this binary binds because llm.rs mounts the whole ikigai-llm space alongside browse. 0.2.13 never reached crates.io, so 0.2.14 is the first released version carrying `provider=` at all.
-ikigai-llm = "0.10"         # urn:llm:* — the explain seam's derivation engine (Registry::from_json)
-ikigai-http = "0.1.7"       # HttpTransport; 0.1.7 = the endpoint-follows-redirects contract our impl obeys
-ikigai-throttle = "0.1.0"   # RateLimit overlay around the exec + llm seams
-ikigai-ipc = "0.1.10"       # serve over a Unix socket (wire-v6 hello; a v7 client refuses pre-hello servers)
-ikigai-vocab = "0.1.33"     # the Turtle meta renderer (describe / catalog)
+# urn:llm:* — the explain seam's derivation engine. Everything llm.rs names in
+# Rust (`space`, `Registry::from_json`, `Registry::single`, `OpenAiConfig::ollama`
+# and its `caps` trait profile) has been there since 0.6.0; the floor is 0.10.0
+# for a resource nothing here calls directly. 0.10.0 added
+# `urn:llm:{provider}:model`, the cheap "which model actually served this?"
+# face, and ikigai-browse resolves it at derive time to stamp the true model id
+# into an archived explanation's version tag — that is what
+# `browse.review_model_label` / `browse.pr_model_label` OVERRIDE, and what they
+# fall back to when unset. Below 0.10.0 that lookup misses and every derived
+# artifact loses its provenance label. Written `0.10.0` rather than `0.10`: an
+# identical caret range, but the point of a floor is to SAY the minimum.
+ikigai-llm = "0.10.0"
+# HttpTransport. 0.1.7 is where "a transport must NOT follow redirects — the
+# ENDPOINT follows them, re-running the net-capability ACL against every hop"
+# became the contract, and llm.rs's `ureq::builder().redirects(0)` is written to
+# it. No earlier published version mentions redirects at all, so below 0.1.7
+# `redirects(0)` means nobody follows them and every 3xx is handed back raw.
+ikigai-http = "0.1.7"
+# RateLimit overlay around the exec + repo + llm seams. 0.1.0 genuinely is the
+# minimum, verified rather than assumed: `Rate::new`, `RateLimit::new` and the
+# `.limit(prefix, rate)` builder are all in the first release, longest-prefix
+# wins, `Verb::Meta` is exempt, and the cap is charged at RESOLUTION — which is
+# what makes main.rs's claim true that explain's internal `urn:llm:` subrequests
+# are governed by the same budget. Nothing this binary uses arrived later.
+ikigai-throttle = "0.1.0"
+# serve over a Unix socket. 0.1.10 is where the version hello exists AT ALL:
+# it is the first release importing `PROTOCOL_VERSION`, writing a `Hello`, and
+# refusing a peer whose version differs. The comparison is EXACT EQUALITY
+# (`hello.version == PROTOCOL_VERSION`), not a range, so a server below 0.1.10
+# answers the handshake with a hang-up and every current client reports it as
+# ancient. `PROTOCOL_VERSION` has been 7 since ikigai-wire 0.1.10 (the wire
+# release ipc 0.1.10 pins) and is still 7 at 0.1.18, so this floor asks for the
+# handshake and nothing above it is required.
+ikigai-ipc = "0.1.10"
+# The meta renderer — and in a server this is not a formatting choice. EVERY
+# Meta face goes through it: `Kernel::issue` calls `renderer.render(&description,
+# &target)` and, for a type the renderer declines, transrepts the CANONICAL
+# TURTLE to it. So this pin bounds what any client across this socket can
+# possibly learn about what is bound here.
+#
+# ★ 0.1.47, not the old 0.1.33 — two distinct gaps, and the second one is the
+# reason for the floor:
+#
+# * 0.1.34 adds `ik:oneOf`, `ik:default`, and the per-verb `ik:Action` /
+#   `ik:action` nodes. 0.1.33 renders only
+#   id/summary/verb/input/inputName/class/required/output/requires, so
+#   `urn:rdf:diff`'s enumerated `mode` (the exact thing ikigai-rdf 0.1.4 is
+#   pinned above to buy) never reaches the wire; explain's `provider` `one_of`
+#   — the allow-list `browse.allow_model` configures — is invisible, so a remote
+#   caller learns the accepted set only by being Denied; and ikigai-browse's
+#   per-verb ActionSpecs have no `ik:Action` for the capability-scoped action
+#   manifold to project.
+# * ⚠ 0.1.47 adds the `application/json` Meta face, and WITHOUT IT REMOTE
+#   NAMED-ARGUMENT ROUTING SILENTLY DIES. `ikigai-resolve`'s `MountedRemote`
+#   asks a mounted endpoint to describe itself as `application/json` and
+#   `serde_json::from_slice`s the answer. Below 0.1.47 the renderer declines
+#   that type; the kernel looks for a `text/turtle` → `application/json`
+#   transreptor, finds none (ikigai-rdf offers `application/ld+json`, which is
+#   not the same media type, and ikigai-jsonld is deliberately not linked here),
+#   and by contract HANDS BACK THE CANONICAL TURTLE. The client then parses
+#   Turtle bytes as JSON, fails, and — because that parse is a `.ok()` — falls
+#   back to a BARE `Description::new("remote")` with no inputs at all. Every
+#   named argument through the mount is dropped: `dir=` on the PR facades,
+#   `provider=` on explain, `as=` everywhere. No error anywhere. main.rs's
+#   comment ("so the engine can route named args (e.g. dir=) to a remote
+#   endpoint by its self-description") is only true from 0.1.47 up.
+#
+# Same disease as the ikigai-repo pin, one turn worse: there the composition
+# raised an error, here it degrades to silence.
+# Deliberately not higher — no endpoint linked here declares a `shape`
+# (`ik:shape`, 0.1.53), and 0.1.66's `escape_iri_fragment` hardening covers ids
+# and class IRIs that are all static and already valid in these crates.
+ikigai-vocab = "0.1.47"
 # The persistence switch for the shared browse/sparql store: ikigai-browse and
 # ikigai-sparql both keep oxigraph at default-features = false (no storage
 # engine), and this feature-unifies Store::open onto the one shared Store type
