@@ -137,28 +137,45 @@ ikigai-throttle = "0.1.0"
 # release ipc 0.1.10 pins) and is still 7 at 0.1.18, so this floor asks for the
 # handshake and nothing above it is required.
 ikigai-ipc = "0.1.10"
-# The Turtle meta renderer (describe / catalog) — the ONLY way a client on the
-# far side of this socket reads what is bound here. ★ 0.1.34, not 0.1.33:
-# `TurtleRenderer` exists from 0.1.22, but 0.1.33 renders only
-# id/summary/verb/input/inputName/class/required/output/requires. `ik:oneOf`,
-# `ik:default`, and the per-verb `ik:Action` / `ik:action` nodes all arrive in
-# 0.1.34. Under a 0.1.33 renderer this server silently under-describes itself
-# in three places that matter:
-#   * `urn:rdf:diff`'s enumerated `mode` — the exact thing ikigai-rdf 0.1.4 is
-#     pinned above to buy — never reaches the wire.
-#   * explain's `provider` ArgSpec `one_of` is the allow-list `browse.allow_model`
-#     configures and the option menu is built from; with no `ik:oneOf` a remote
-#     caller cannot see which providers this host will accept and learns only by
-#     being Denied.
-#   * ikigai-browse declares per-verb ActionSpecs (the annotation family is
-#     Source + Sink with different authority); with no `ik:Action` the
-#     capability-scoped action manifold has nothing to project.
-# Same shape as the ikigai-repo defect: a floor low enough that the manifold
-# quietly says less than the composition does, with nothing failing.
+# The meta renderer — and in a server this is not a formatting choice. EVERY
+# Meta face goes through it: `Kernel::issue` calls `renderer.render(&description,
+# &target)` and, for a type the renderer declines, transrepts the CANONICAL
+# TURTLE to it. So this pin bounds what any client across this socket can
+# possibly learn about what is bound here.
+#
+# ★ 0.1.47, not the old 0.1.33 — two distinct gaps, and the second one is the
+# reason for the floor:
+#
+# * 0.1.34 adds `ik:oneOf`, `ik:default`, and the per-verb `ik:Action` /
+#   `ik:action` nodes. 0.1.33 renders only
+#   id/summary/verb/input/inputName/class/required/output/requires, so
+#   `urn:rdf:diff`'s enumerated `mode` (the exact thing ikigai-rdf 0.1.4 is
+#   pinned above to buy) never reaches the wire; explain's `provider` `one_of`
+#   — the allow-list `browse.allow_model` configures — is invisible, so a remote
+#   caller learns the accepted set only by being Denied; and ikigai-browse's
+#   per-verb ActionSpecs have no `ik:Action` for the capability-scoped action
+#   manifold to project.
+# * ⚠ 0.1.47 adds the `application/json` Meta face, and WITHOUT IT REMOTE
+#   NAMED-ARGUMENT ROUTING SILENTLY DIES. `ikigai-resolve`'s `MountedRemote`
+#   asks a mounted endpoint to describe itself as `application/json` and
+#   `serde_json::from_slice`s the answer. Below 0.1.47 the renderer declines
+#   that type; the kernel looks for a `text/turtle` → `application/json`
+#   transreptor, finds none (ikigai-rdf offers `application/ld+json`, which is
+#   not the same media type, and ikigai-jsonld is deliberately not linked here),
+#   and by contract HANDS BACK THE CANONICAL TURTLE. The client then parses
+#   Turtle bytes as JSON, fails, and — because that parse is a `.ok()` — falls
+#   back to a BARE `Description::new("remote")` with no inputs at all. Every
+#   named argument through the mount is dropped: `dir=` on the PR facades,
+#   `provider=` on explain, `as=` everywhere. No error anywhere. main.rs's
+#   comment ("so the engine can route named args (e.g. dir=) to a remote
+#   endpoint by its self-description") is only true from 0.1.47 up.
+#
+# Same disease as the ikigai-repo pin, one turn worse: there the composition
+# raised an error, here it degrades to silence.
 # Deliberately not higher — no endpoint linked here declares a `shape`
-# (`ik:shape`, 0.1.53), and 0.1.66's `escape_iri_fragment` hardening covers
-# ids and class IRIs that are all static and already valid in these crates.
-ikigai-vocab = "0.1.34"
+# (`ik:shape`, 0.1.53), and 0.1.66's `escape_iri_fragment` hardening covers ids
+# and class IRIs that are all static and already valid in these crates.
+ikigai-vocab = "0.1.47"
 # The persistence switch for the shared browse/sparql store: ikigai-browse and
 # ikigai-sparql both keep oxigraph at default-features = false (no storage
 # engine), and this feature-unifies Store::open onto the one shared Store type
