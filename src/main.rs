@@ -8,9 +8,11 @@
 //! Unix socket. It does NOT link EventKit or the calendar, so their code (and
 //! any flaw in it) is simply not present.
 //!
-//!   ikigai-dev [socket] [flags]      # default: ~/.ikigai/dev.sock
-//!   ikigai --connect <socket>        # drive it from the REPL
-//!   ikigai-dev --help                # the config-home grammar (~/.config/ikigai/dev.toml)
+//! ```text
+//! ikigai-dev [socket] [flags]      # default: ~/.ikigai/dev.sock
+//! ikigai --connect <socket>        # drive it from the REPL
+//! ikigai-dev --help                # the config-home grammar (~/.config/ikigai/dev.toml)
+//! ```
 //!
 //! Decision of record: **this server owns the browse store on a machine** —
 //! the store takes an exclusive lock, so one process serves the family and
