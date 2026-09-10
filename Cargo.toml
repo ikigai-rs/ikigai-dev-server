@@ -33,16 +33,25 @@ path = "src/main.rs"
 # reading room (see ikigai-repo). A pin too HIGH fails instantly and locally; a
 # pin too LOW is silent until it isn't. Only the low direction needs a rule.
 #
-# 0.1.56 is the true floor of this build, and it is not OURS: what this binary
+# 0.1.67 is the true floor of this build, and it is not OURS: what this binary
 # itself reaches for is still the 0.1.49 baseline (kernel-enforced declared
-# `requires`). ikigai-browse 0.3.0 pins `ikigai-core` 0.1.56 outright, and so
-# does `ikigai-a11y` 0.2.1 beneath it (`config::config_home` /
-# `layered_paths_in`), so Cargo can never resolve this graph lower. A pin naming
-# a version the graph cannot satisfy describes a build nobody has, so it states
-# the real floor.
-# ⚠ Deliberately NOT 0.1.63, where `Kernel::with_aliases` arrived: this server
-# installs no alias table. See the ikigai-browse note below for the argument.
-ikigai-core = "0.1.56"
+# `requires`). Two things push it up, and the second is the one that moved it
+# from 0.1.56 to here:
+#
+# * ikigai-browse 0.3.0 pins `ikigai-core` 0.1.56 outright, and so does
+#   `ikigai-a11y` 0.2.1 beneath it (`config::config_home` / `layered_paths_in`).
+# * `ikigai-conformance` 0.1.0 — the dev-dependency behind `tests/conformance.rs`
+#   — requires `^0.1.67`, and **cargo unifies `ikigai-core` across the whole
+#   graph, dev-dependencies included**. One lock serves `cargo build` and
+#   `cargo test` alike, so this is not a test-only floor: it is the version the
+#   shipped binary links. A dev-dependency really can retune a production pin.
+#
+# A pin naming a version the graph cannot satisfy describes a build nobody has,
+# so it states the real floor.
+# ⚠ 0.1.63, where `Kernel::with_aliases` arrived, is now below the floor rather
+# than deliberately excluded — but the decision it recorded stands: this server
+# installs NO alias table. See the ikigai-browse note below for the argument.
+ikigai-core = "0.1.67"
 # urn:system:exec + urn:repo:* (the dev seam). ★ 0.1.5, and the four versions
 # between it and the old `0.1.0` floor are the whole PR family:
 #   0.1.3  urn:repo:pr:list, urn:repo:pr:diff   (absent in 0.1.2)
@@ -121,22 +130,44 @@ ikigai-llm = "0.10.0"
 # it. No earlier published version mentions redirects at all, so below 0.1.7
 # `redirects(0)` means nobody follows them and every 3xx is handed back raw.
 ikigai-http = "0.1.7"
-# RateLimit overlay around the exec + repo + llm seams. 0.1.0 genuinely is the
-# minimum, verified rather than assumed: `Rate::new`, `RateLimit::new` and the
-# `.limit(prefix, rate)` builder are all in the first release, longest-prefix
-# wins, `Verb::Meta` is exempt, and the cap is charged at RESOLUTION — which is
-# what makes main.rs's claim true that explain's internal `urn:llm:` subrequests
-# are governed by the same budget. Nothing this binary uses arrived later.
-ikigai-throttle = "0.1.0"
+# RateLimit overlay around the exec + repo + llm seams. Everything this binary
+# uses is in the FIRST release, verified rather than assumed: `Rate::new`,
+# `RateLimit::new` and the `.limit(prefix, rate)` builder, longest-prefix wins,
+# `Verb::Meta` exempt, and the cap charged at RESOLUTION — which is what makes
+# lib.rs's claim true that explain's internal `urn:llm:` subrequests are
+# governed by the same budget.
+#
+# ⚠ And the floor is 0.1.8 all the same, because a floor states the minimum of a
+# COMPILABLE set, not of an API. `ikigai-core` 0.1.60 gave `Resolved` a public
+# `canonical` field, and every version of this crate through 0.1.7 builds a
+# `Resolved { .. }` struct literal without it: against the core floor above,
+# `ikigai-throttle` 0.1.0 fails with `error[E0063]: missing field `canonical` in
+# initializer of `Resolved``, INSIDE a published dependency, with nothing in
+# either manifest saying so. 0.1.8 is the first release that sets the field (and
+# the first requiring core `^0.1.64`). Found by resolving this manifest from
+# scratch with every ikigai pin written `=<floor>` — which is the only way to
+# see it, since a caret resolve just picks 0.1.9 and says nothing.
+ikigai-throttle = "0.1.8"
 # serve over a Unix socket. 0.1.10 is where the version hello exists AT ALL:
 # it is the first release importing `PROTOCOL_VERSION`, writing a `Hello`, and
 # refusing a peer whose version differs. The comparison is EXACT EQUALITY
 # (`hello.version == PROTOCOL_VERSION`), not a range, so a server below 0.1.10
 # answers the handshake with a hang-up and every current client reports it as
-# ancient. `PROTOCOL_VERSION` has been 7 since ikigai-wire 0.1.10 (the wire
-# release ipc 0.1.10 pins) and is still 7 at 0.1.18, so this floor asks for the
-# handshake and nothing above it is required.
-ikigai-ipc = "0.1.10"
+# ancient. `PROTOCOL_VERSION` has been 7 since ikigai-wire 0.1.10 and is still 7
+# at 0.1.19, so nothing this binary CALLS is above 0.1.10.
+#
+# ⚠ The floor is 0.1.18 for the transitive reason, and it is the same disease as
+# the throttle pin one paragraph up, one level deeper: `ikigai-resolve` through
+# 0.1.16 builds `Resolved { .. }` without `canonical` and therefore does not
+# compile against the core floor above, and `ikigai-ipc` through 0.1.17 declares
+# `ikigai-resolve = "^0.1.14"` — a range that ADMITS 0.1.14 and 0.1.16. So an ipc
+# floor below 0.1.18 declares a set that is not guaranteed to compile at all: a
+# fresh resolve happens to pick 0.1.19 and looks fine, and a lock that does not
+# fails inside a published crate for reasons neither manifest mentions (the shape
+# that cost ikigai-web #14 its window). 0.1.18 is the first release pinning
+# `ikigai-resolve = "^0.1.18"`, so the admitted set is compilable by
+# construction.
+ikigai-ipc = "0.1.18"
 # The meta renderer — and in a server this is not a formatting choice. EVERY
 # Meta face goes through it: `Kernel::issue` calls `renderer.render(&description,
 # &target)` and, for a type the renderer declines, transrepts the CANONICAL
@@ -172,10 +203,14 @@ ikigai-ipc = "0.1.10"
 #
 # Same disease as the ikigai-repo pin, one turn worse: there the composition
 # raised an error, here it degrades to silence.
-# Deliberately not higher — no endpoint linked here declares a `shape`
-# (`ik:shape`, 0.1.53), and 0.1.66's `escape_iri_fragment` hardening covers ids
-# and class IRIs that are all static and already valid in these crates.
-ikigai-vocab = "0.1.47"
+# Nothing this binary itself needs is above 0.1.47 — no endpoint linked here
+# declares a `shape` (`ik:shape`, 0.1.53), and 0.1.66's `escape_iri_fragment`
+# hardening covers ids and class IRIs that are all static and already valid in
+# these crates. The floor is 0.1.66 for the same reason core's is 0.1.67:
+# `ikigai-conformance` 0.1.0 requires `ikigai-vocab = "^0.1.66"`, cargo unifies
+# it across the graph, and 0.1.66 is the first vocab release that requires core
+# `^0.1.66` — so below it the declared set contradicts the core floor.
+ikigai-vocab = "0.1.66"
 # The persistence switch for the shared browse/sparql store: ikigai-browse and
 # ikigai-sparql both keep oxigraph at default-features = false (no storage
 # engine), and this feature-unifies Store::open onto the one shared Store type
@@ -183,3 +218,14 @@ ikigai-vocab = "0.1.47"
 oxigraph = { version = "0.5", default-features = false, features = ["rocksdb"] }
 async-trait = "0.1"         # the HttpTransport impl (blocking ureq under the async trait)
 ureq = "2"                  # the native HTTP client behind urn:llm:*
+
+[dev-dependencies]
+# The module recipe as one test (`tests/conformance.rs`). ⚠ This is the pin that
+# moved `ikigai-core` to 0.1.67 and `ikigai-vocab` to 0.1.66 above: cargo unifies
+# a package across normal and dev dependencies, and one lock serves `cargo build`
+# and `cargo test`, so a dev-dependency's floor is a PRODUCTION floor. Written
+# `0.1.0` because that is what is on crates.io; the local main is ahead (an
+# OUTPUTS check), and a pin no stranger can resolve is not a pin.
+ikigai-conformance = "0.1.0"
+futures = "0.3"             # block_on for the by-hand probes beside the suite
+tempfile = "3"              # the scratch browse root and store
