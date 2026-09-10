@@ -373,7 +373,7 @@ fn suite() -> Suite {
         // says so ("Transreption is a pure function of its input bytes"), and the kernel
         // folds in a piped input's expiry rather than the endpoint asserting one. So its
         // empty thread set is by design, not a representation cached with nothing to cut.
-        // The other three empty-thread findings below are NOT of that kind and are left
+        // The other three empty-thread findings are NOT of that kind and are left
         // standing: `llm-config`, `llm-models` and `llm-select` read the provider registry
         // (`llm.json`), a file no thread names, so they really are cached for the life of
         // the process.
@@ -385,7 +385,8 @@ fn suite() -> Suite {
         // (rdf, rdfs, xsd, owl, dcterms, foaf, schema, prov, ical, skos, sh) simply does
         // not carry it, so eleven standard terms are reported as "invented with no
         // definition" on both endpoints that serve the overlay — 31 findings of pure
-        // noise that would bury the six real ones. Reported for the conformance PENDING as
+        // noise, against a report whose whole non-ARGSPECS content is four lines. Reported
+        // for the conformance PENDING as
         // a well-known-list gap, not as an ikigai-browse defect.
         .namespace("http://www.w3.org/ns/oa#")
         // ---- not fired, and why ------------------------------------------------------
