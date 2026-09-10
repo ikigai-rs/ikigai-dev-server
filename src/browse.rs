@@ -68,6 +68,20 @@ pub fn wire(settings: &BrowseSettings) -> Browse {
             settings.store.display()
         )
     }));
+    wire_with_store(settings, store)
+}
+
+/// Bind the family over a store the caller already holds.
+///
+/// Split from [`wire`] so a test can walk the family over an in-memory
+/// [`Store`]: opening the real archive would take the exclusive RocksDB lock
+/// the running server holds, and a test that needs the machine's daemon
+/// stopped is a test nobody runs.
+///
+/// # Panics
+///
+/// Fails loud when the vocabulary cannot load.
+pub fn wire_with_store(settings: &BrowseSettings, store: Arc<Store>) -> Browse {
     ikigai_sparql::load_vocabulary(&store).unwrap_or_else(|e| {
         panic!("ikigai-dev: loading the vocabulary into the browse store: {e:?}")
     });

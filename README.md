@@ -146,6 +146,39 @@ spawns/min on exec, 120 reads/min on `urn:repo:`, and 30 asks/min on
 asks too, since subrequests resolve back through the overlay). Pure local
 graph ops pass unlimited.
 
+## Conformance, and what a mounting client actually gets
+
+`tests/conformance.rs` runs [`ikigai-conformance`](https://github.com/ikigai-rs/ikigai-conformance)
+over the kernel this binary serves — the same `ikigai_dev_server::compose` that
+`main` calls, not a re-creation of it. This crate binds **zero endpoints of its
+own**, so the test is not "does my module conform" but three questions a
+composing host is the only place to ask:
+
+- **Is the served catalog exactly what the manifest composes?** Every pattern is
+  pinned with the crate that owns it, so linkage-gating is a checked fact rather
+  than a paragraph, and a dependency that grows an endpoint puts it on this
+  socket only after someone classifies it.
+- **Does every entry answer `Verb::Meta` with a real contract?** This process is
+  the peer on the other end of everyone else's `mount` line, and a peer with no
+  Meta renderer does not fail — it degrades. `ForwardingEndpoint::describe` is
+  best-effort and falls back to `Description::new("remote")`, so a renderer-less
+  peer shows up in a client's catalog as one anonymous, action-less row: a whole
+  federated kernel reading as *small* rather than broken. The test pins the JSON
+  Meta face specifically, because that is the one a mount parses.
+- **What does a mount cost?** Golden threads are `#[serde(skip)]` and do not
+  cross a wire, so a cacheable representation arrives at a mounting client with
+  nothing that can ever cut it. Exactly one resource this server serves has a
+  thread to lose — `urn:repo:style`, which hangs on the layered `a11y.toml`
+  files. Everything the browse family reads out of a working tree is
+  `Expiry::Always`, live by design: this process runs no filesystem watcher, and
+  a server must not mint a thread no host keeps.
+
+Findings from the composed modules (`ikigai-repo`, `ikigai-rdf`,
+`ikigai-sparql`, `ikigai-browse`, `ikigai-llm`) are **recorded and attributed,
+not fixed here** — they belong to those repos. Today: 103, of which 99 are
+untyped inputs. Zero are this crate's, and the test fails if a finding ever
+names an endpoint the catalog table does not.
+
 ## Security posture (honest)
 
 Three real bounds today — **linkage** (only these modules exist),

@@ -28,13 +28,24 @@ use ikigai_core::EndpointSpace;
 use crate::config;
 
 /// The LLM module space (`urn:llm:ask` + `urn:llm:{provider}:ask` + `:models`
-/// etc.) on the native ureq transport.
-pub fn space() -> EndpointSpace {
-    ikigai_llm::space(Arc::new(UreqTransport), registry())
+/// etc.) on the native ureq transport, over a registry the caller supplies.
+///
+/// The registry is a parameter rather than a read because it decides the
+/// SHAPE of the space, not only its behaviour: one `urn:llm:{provider}:ask`
+/// (plus `:model`, `:installed`, `:up`) is bound per declared provider, so the
+/// catalog this server serves is a function of `llm.json`. A test that wants a
+/// fixed catalog declares its own; [`registry`] is what the process uses.
+pub fn space_with(registry: ikigai_llm::Registry) -> EndpointSpace {
+    ikigai_llm::space(Arc::new(UreqTransport), registry)
 }
 
 /// The declared registry: the config-home `llm.json`, else the Ollama default.
-fn registry() -> ikigai_llm::Registry {
+///
+/// # Panics
+///
+/// Loud when the file exists and does not parse: a config that exists but does
+/// not parse must never look like a config that is not there.
+pub fn registry() -> ikigai_llm::Registry {
     let path = config::config_dir().join("llm.json");
     match std::fs::read_to_string(&path) {
         Ok(json) => ikigai_llm::Registry::from_json(&json).unwrap_or_else(|e| {
