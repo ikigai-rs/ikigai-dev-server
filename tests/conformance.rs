@@ -27,7 +27,7 @@
 //!
 //! - [`every_served_entry_answers_meta_with_a_real_contract`] — the Meta renderer is what a
 //!   mounting client reads a contract through, and losing it degrades rather than fails.
-//! - [`only_the_style_face_carries_a_thread_a_mount_would_erase`] — golden threads do not
+//! - [`the_threads_a_mount_would_erase_are_enumerated`] — golden threads do not
 //!   cross a wire, so this is the blast radius of that hole, enumerated.
 //! - [`the_bare_annotation_minting_iri_is_bound_but_not_enumerated`] — the only write path
 //!   of the annotation overlay is not in the catalog, which is why the operator's mount
@@ -76,17 +76,20 @@
 //!
 //! ## What the walk still reports, after all that
 //!
-//! 28 findings, none of them this crate's, and 23 of them `ikigai-llm`'s — which is the
-//! whole shape of the number. When this file was written the count was 103 across five
-//! module crates; `ikigai-repo`, `ikigai-rdf`, `ikigai-sparql` and `ikigai-browse` have
-//! since adopted the suite themselves and a fresh resolve picks up their fixes, so what is
-//! left is concentrated in the one dependency this manifest still pins BELOW the
-//! ecosystem's line (`ikigai-llm = "0.10.0"`; see the manifest and this repo's PENDING §2).
-//! Nineteen `ARGSPECS` (untyped `urn:llm:*` inputs), one `OUTPUTS` on `browse-file`
-//! (`text/markdown` served, not declared), two failed minimal resolutions the suite asks
-//! for fixtures for (`sparql-update`, `annotation`'s Sink), and six `CACHEABLE`
-//! (`Expiry::Never` with no thread). Zero `ENFORCED`, zero `DECLARATIONS`, zero `NAMES`,
-//! zero `REQUIRES-VERB`, zero `SKOLEM-RDF`, zero `VOCABULARY`, zero `PIPELINE`.
+//! **5 findings, none of them this crate's.** When this file was written the count was
+//! 103 across five module crates, and every one of the 98 that went away went away in
+//! another repo: `ikigai-repo`, `ikigai-rdf`, `ikigai-sparql`, `ikigai-browse` and
+//! `ikigai-llm` each adopted the suite themselves, and this walk picks their fixes up on
+//! a fresh resolve. (23 of them landed in one step here, when the `ikigai-llm` floor moved
+//! off the 0.10 line — see the manifest.) That is the composed-host dividend, and it is
+//! the argument for the whole exercise: a host that composes five modules gets five
+//! modules' conformance for the price of stating its catalog.
+//!
+//! What is left: two `CACHEABLE` (`rdf-union`, `rdf-diff` — cacheable with an empty
+//! thread set), one `OUTPUTS` on `browse-file` (`text/markdown` served, not declared),
+//! and two minimal resolutions the suite would like fixtures for (`sparql-update`,
+//! `annotation`'s Sink). Zero `ENFORCED`, zero `DECLARATIONS`, zero `ARGSPECS`, zero
+//! `NAMES`, zero `REQUIRES-VERB`, zero `SKOLEM-RDF`, zero `VOCABULARY`, zero `PIPELINE`.
 //!
 //! The count is printed, never pinned: it drops on its own as each module's own adoption
 //! lands, and pinning it would make another crate's improvement a failure here.
@@ -735,47 +738,61 @@ fn every_served_entry_answers_meta_with_a_real_contract() {
 /// (conformance PENDING #132; ikigai-cli PENDING §6 owns the fix, whose shape shipped as
 /// `ResolvedThreaded` in ikigai-module 0.3.0). That is the CLIENT's bug, not this server's.
 /// What this server can state is the list of its representations that have anything to lose,
-/// and it is exactly one:
+/// and `ikigai-llm` 0.12.1 made that list longer — which is the good kind of longer:
 ///
 /// | resource | expiry | threads |
 /// |---|---|---|
 /// | `urn:repo:style` | `Never` | `urn:file:{config home}/a11y.toml`, `…/dev-server.a11y.toml` |
+/// | `urn:llm:config` | `Never` | `urn:llm:config` |
+/// | `urn:llm:models` | `Never` | `urn:llm:config` |
+/// | `urn:llm:select` | `Never` | `urn:llm:config` |
+/// | `urn:llm:ollama:model` | `Never` | `urn:llm:config` |
 ///
 /// Everything else the browse family serves over a working tree is `Expiry::Always` — LIVE,
 /// which is the honest spelling for a read of a tree nothing here watches (core PENDING §18:
 /// thread names are host-relative, so a server must not mint a thread no host keeps).
 ///
-/// ⚠ Two things follow that are worth saying out loud rather than leaving to the table:
+/// ⚠ Three things follow that are worth saying out loud rather than leaving to the table:
 ///
-/// * `urn:llm:config` and `urn:llm:models` are `Expiry::Never` with NO thread at all — they
-///   already have the disease a mount inflicts, in-process, and the suite reports them
-///   (`llm-config CACHEABLE`, `llm-models CACHEABLE`). A mount cannot make them worse.
-/// * `urn:repo:style`'s threads name files **nothing in this process watches**. There is no
-///   filesystem watcher here, so editing `a11y.toml` does not cut them and the style face is
-///   already cached for the life of the daemon; the mount merely removes the last way a
-///   client could have cut it by hand. Both halves are recorded rather than fixed — minting
-///   the thread is `ikigai-a11y`'s, keeping it is a host's.
+/// * The four `urn:llm:` rows are new at `ikigai-llm` 0.12.1 and are the reason this repo
+///   raised that floor. Until then they were `Expiry::Never` with NO thread at all — they
+///   already had, in-process, the disease a mount inflicts, and the suite reported all four
+///   (`CACHEABLE`). They are all config-derived and all name the one registry thread, so a
+///   host that grows live reload cuts `urn:llm:config` once and every derived
+///   representation recomputes, a mounted copy included.
+/// * ⚠ **A named thread is not a cut thread.** Nothing in this process cuts
+///   `urn:llm:config` either: the registry is read once at kernel construction and a
+///   restart is the only reload. The same is true of `urn:repo:style`, whose threads name
+///   `a11y.toml` files no watcher here watches. So all five rows are still served for the
+///   life of the daemon; what changed is that a client now HAS a name to cut, where before
+///   there was nothing to aim at. The suite cannot see this distinction (its own docs say
+///   so: "a declared golden thread is a promise a host must keep"), which is why it is
+///   written down here. This repo's PENDING §3 owns the watcher question.
+/// * Minting the a11y thread is `ikigai-a11y`'s; keeping any of them is a host's.
 #[test]
-fn only_the_style_face_carries_a_thread_a_mount_would_erase() {
+fn the_threads_a_mount_would_erase_are_enumerated() {
     let served = served();
-    let probes = [
-        "urn:repo:demo:tree",
-        "urn:repo:demo:tree:src",
-        "urn:repo:demo:file:README.md",
-        "urn:repo:demo:state",
-        "urn:repo:demo:hash",
-        "urn:repo:demo:hash:README.md",
-        "urn:repo:demo:annotations",
-        "urn:repo:demo:annotations:README.md",
-        "urn:repo:demo:explain-versions",
-        "urn:repo:style",
-        "urn:llm:config",
-        "urn:llm:models",
+    let probes: &[(&str, &[(&str, &str)])] = &[
+        ("urn:repo:demo:tree", &[]),
+        ("urn:repo:demo:tree:src", &[]),
+        ("urn:repo:demo:file:README.md", &[]),
+        ("urn:repo:demo:state", &[]),
+        ("urn:repo:demo:hash", &[]),
+        ("urn:repo:demo:hash:README.md", &[]),
+        ("urn:repo:demo:annotations", &[]),
+        ("urn:repo:demo:annotations:README.md", &[]),
+        ("urn:repo:demo:explain-versions", &[]),
+        ("urn:repo:style", &[]),
+        ("urn:llm:config", &[]),
+        ("urn:llm:models", &[]),
+        // `needs` has no default; the fixture registry declares the `text` modality.
+        ("urn:llm:select", &[("needs", "text")]),
+        ("urn:llm:ollama:model", &[]),
     ];
     let mut threaded: BTreeMap<&str, Vec<String>> = BTreeMap::new();
     let mut cached_without_a_thread: Vec<&str> = Vec::new();
-    for target in probes {
-        let repr = issue(&served.kernel, request(Verb::Source, target, &[]))
+    for (target, args) in probes {
+        let repr = issue(&served.kernel, request(Verb::Source, target, args))
             .unwrap_or_else(|e| panic!("`{target}` resolves in the scratch composition: {e}"));
         let threads: Vec<String> = repr.threads().iter().map(|t| t.to_string()).collect();
         if !threads.is_empty() {
@@ -786,7 +803,13 @@ fn only_the_style_face_carries_a_thread_a_mount_would_erase() {
     }
     assert_eq!(
         threaded.keys().copied().collect::<Vec<_>>(),
-        vec!["urn:repo:style"],
+        vec![
+            "urn:llm:config",
+            "urn:llm:models",
+            "urn:llm:ollama:model",
+            "urn:llm:select",
+            "urn:repo:style",
+        ],
         "the list of representations a mount would strip of their threads changed; \
          update the table in this test's docs and tell the hub — it is the blast radius"
     );
@@ -799,10 +822,24 @@ fn only_the_style_face_carries_a_thread_a_mount_would_erase() {
         ],
         "and they are the layered a11y config files, under the config home"
     );
-    assert_eq!(
-        cached_without_a_thread,
-        vec!["urn:llm:config", "urn:llm:models"],
-        "cacheable with nothing to cut, already, in-process"
+    for target in [
+        "urn:llm:config",
+        "urn:llm:models",
+        "urn:llm:ollama:model",
+        "urn:llm:select",
+    ] {
+        assert_eq!(
+            threaded[target],
+            vec!["urn:llm:config".to_string()],
+            "`{target}` is config-derived, so it hangs on the one registry thread: cutting \
+             `urn:llm:config` recomputes all four, a mounted copy included"
+        );
+    }
+    assert!(
+        cached_without_a_thread.is_empty(),
+        "every cacheable representation this server serves now names a thread — one that \
+         arrived here cacheable with nothing to cut is exactly the mount disease, in-process: \
+         {cached_without_a_thread:?}"
     );
 }
 

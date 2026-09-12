@@ -471,6 +471,15 @@ fn no_declared_gate_is_crossed_before_it_is_checked() {
 /// `tests/conformance.rs` waiver may NOT be narrowed to `ENFORCED`, and a module that
 /// grows an ungated action lands here as a red test rather than as a walk that acts.
 ///
+/// ⚠ **It is a property of THIS fixture registry, not of the composition.** From
+/// `ikigai-llm` 0.12.0 a provider may name only the server, and `urn:llm:{p}:model`
+/// declares `urn:cap:net:*` in that discovering form and nothing in the pinned one —
+/// deliberately, so the manifold does not over-offer. The fixture below pins a model, so
+/// `llm-ollama-model` is ungated here; an operator whose `llm.json` leaves `model` unset
+/// gets a gated one. Both are correct, and the consequence for a reader is that this list
+/// answers "what does the walk fire" for the configuration under test, not for every
+/// deployment.
+///
 /// Firing every one of them is harmless, in two groups:
 ///
 /// * the `urn:rdf:*` and `urn:sparql:*` graph ops are pure, local and in-memory — the

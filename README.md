@@ -167,17 +167,25 @@ composing host is the only place to ask:
   Meta face specifically, because that is the one a mount parses.
 - **What does a mount cost?** Golden threads are `#[serde(skip)]` and do not
   cross a wire, so a cacheable representation arrives at a mounting client with
-  nothing that can ever cut it. Exactly one resource this server serves has a
-  thread to lose — `urn:repo:style`, which hangs on the layered `a11y.toml`
-  files. Everything the browse family reads out of a working tree is
-  `Expiry::Always`, live by design: this process runs no filesystem watcher, and
-  a server must not mint a thread no host keeps.
+  nothing that can ever cut it. Five resources this server serves have a thread
+  to lose, and the test enumerates them: `urn:repo:style`, which hangs on the
+  layered `a11y.toml` files, and `urn:llm:config` / `:models` / `:select` /
+  `:ollama:model`, which are config-derived and all hang on the one registry
+  thread `urn:llm:config`. Everything the browse family reads out of a working
+  tree is `Expiry::Always`, live by design: this process runs no filesystem
+  watcher, and a server must not mint a thread no host keeps. ⚠ A named thread
+  is not a cut thread — nothing in this process cuts any of the five today, so
+  they are still served for the life of the daemon; what a name buys is
+  something for a client to aim at.
 
 Findings from the composed modules (`ikigai-repo`, `ikigai-rdf`,
 `ikigai-sparql`, `ikigai-browse`, `ikigai-llm`) are **recorded and attributed,
-not fixed here** — they belong to those repos. Today: 28, of which 23 are
-`ikigai-llm`'s (the one dependency this manifest still pins below the
-ecosystem's line). Zero are this crate's, and the test fails if a finding ever
+not fixed here** — they belong to those repos. **Today: 5.** It was 103 when
+this test was written, and every one of the 98 that went away went away in
+another repo: each of those five crates adopted the suite itself, and this walk
+picks their fixes up on a fresh resolve. That is the composed-host dividend — a
+host that composes five modules gets five modules' conformance for the price of
+stating its catalog. Zero are this crate's, and the test fails if a finding ever
 names an endpoint the catalog table does not.
 
 ### The declared capability gates are under test
