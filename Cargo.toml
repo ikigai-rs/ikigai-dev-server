@@ -1,12 +1,24 @@
 [package]
 name = "ikigai-dev-server"
 description = "A standalone, linkage-gated ikigai server for development tooling: git/gh/cargo + graphs + the browse family (persistent explanations/annotations), exec and llm rate-limited, over IPC."
-# 0.3.0, MINOR and not a patch, for the same reason ikigai-browse 0.3.0 was:
+# 0.3.0 was MINOR and not a patch for the same reason ikigai-browse 0.3.0 was:
 # the RESOURCE NAMES this binary serves are its public interface, and the
-# annotation family answers under a new one. A patch would ride a bare
+# annotation family answered under a new one. A patch would ride a bare
 # `cargo install` and take the old names out from under the mounts pointed at
 # this socket.
-version = "0.3.0"
+#
+# ★ 0.4.0 is MINOR on the second half of that rule, and it is worth spelling out
+# because no name changes here at all. A mount reads a peer's endpoints through
+# `Verb::Meta`, so what this binary publishes is not only the names but the
+# CONTRACTS under them — and raising the `ikigai-llm` floor off the 0.10 line
+# changes three of those, additively: every `urn:llm:*` input gains an ArgSpec
+# `class` (so `urn:kernel:validate` can pre-flight it and `urn:kernel:actions`
+# can narrow on it), four representations gain the `urn:llm:config` golden thread
+# (so a mounted copy has something to cut), and `urn:llm:{p}:model` declares
+# `urn:cap:net:*` when the provider names only a server. Nothing is removed and
+# nothing that worked stops working, which is exactly what makes it a minor
+# rather than either a patch or a break.
+version = "0.4.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 authors = ["Brian Sletten <brian.sletten@gmail.com>"]
@@ -114,16 +126,49 @@ ikigai-sparql = "0.1.6"
 ikigai-browse = "0.3.0"     # urn:repo:{repo}:tree/file/…/explain/review + urn:iki:annotation:* + the PR family; 0.2.6 = review_* (0.2.5) and pr_* (0.2.6) ExplainConfig knobs we wire. 0.2.12 is the a11y floor: urn:repo:style reads its themes and contrast floor from the layered a11y.toml and lifts every sub-floor colour to the theme's own foreground. Below 0.2.11 it also leaked the light theme into dark mode, rendering parameters at 1.03:1. Stated so a stale cached index cannot resolve back past either. 0.2.14 raises the floor again and BOTH of those reasons still hold: 0.2.13 added `provider={iri}` on explain plus the `allow_provider`/`allow_providers` allowlist we feed from `browse.allow_model`, and 0.2.14 added the option menu beside the explain button — its panel resolves `urn:llm:models` once per open, which this binary binds because llm.rs mounts the whole ikigai-llm space alongside browse. 0.2.13 never reached crates.io, so 0.2.14 is the first released version carrying `provider=` at all.
 # urn:llm:* — the explain seam's derivation engine. Everything llm.rs names in
 # Rust (`space`, `Registry::from_json`, `Registry::single`, `OpenAiConfig::ollama`
-# and its `caps` trait profile) has been there since 0.6.0; the floor is 0.10.0
-# for a resource nothing here calls directly. 0.10.0 added
-# `urn:llm:{provider}:model`, the cheap "which model actually served this?"
-# face, and ikigai-browse resolves it at derive time to stamp the true model id
-# into an archived explanation's version tag — that is what
-# `browse.review_model_label` / `browse.pr_model_label` OVERRIDE, and what they
-# fall back to when unset. Below 0.10.0 that lookup misses and every derived
-# artifact loses its provenance label. Written `0.10.0` rather than `0.10`: an
-# identical caret range, but the point of a floor is to SAY the minimum.
-ikigai-llm = "0.10.0"
+# and its `caps` trait profile) has been there since 0.6.0; 0.10.0 added
+# `urn:llm:{provider}:model`, the cheap "which model actually served this?" face
+# that ikigai-browse resolves at derive time to stamp the true model id into an
+# archived explanation's version tag — that is what `browse.review_model_label` /
+# `browse.pr_model_label` OVERRIDE, and what they fall back to when unset. Below
+# 0.10.0 that lookup misses and every derived artifact loses its provenance label.
+#
+# ★ 0.12.1, and note what the old `0.10.0` pin really was: under cargo's 0.x caret
+# rule `^0.10.0` means `>=0.10.0, <0.11.0`, so a floor stated as a minimum was
+# also a CEILING, and this binary served the 0.10 line of `urn:llm:*` for two
+# minor releases after the ecosystem moved. That is worth stating because the
+# floor doctrine one screen up only guards the LOW direction; on a 0.x dependency
+# the same line silently guards the high one too, and nothing says so.
+#
+# 0.12.1 rather than the current 0.12.2, because the floor states the minimum
+# that carries what this binary depends on, and what it depends on is 0.12.1's
+# conformance adoption — verified by unpacking, not assumed:
+#
+# * THE REGISTRY GOLDEN THREAD. `urn:llm:config`, `:models`, `:select` and a
+#   pinned provider's `:model` were `Expiry::Never` with an EMPTY thread set
+#   through 0.12.0 — cached for the life of the daemon with nothing that could
+#   ever cut them, and a copy cached on the far side of a mount could not be
+#   invalidated at all. 0.12.1 hangs all four on `urn:llm:config`, so a host that
+#   grows live reload cuts one thread and every derived representation
+#   recomputes. `tests/conformance.rs::the_threads_a_mount_would_erase_are_enumerated`
+#   asserts the exact thread names, so this is a pinned fact and not a hope.
+# * Typed ArgSpecs on every `urn:llm:*` input, which is what this manifest is FOR:
+#   the whole client surface here is self-description over a socket, and an input
+#   with no class is one `urn:kernel:validate` cannot pre-flight and
+#   `urn:kernel:actions` cannot narrow on. It took the composed walk's inherited
+#   findings from 28 to 5 — every one of the 23 was `ikigai-llm`'s.
+# * 0.11.0's "a provider may name the SERVER, not the model" and 0.12.0's load-shape
+#   routing trait come along with it. ⚠ One served consequence, deliberate and
+#   worth reading before writing an `llm.json`: `urn:llm:{p}:model` declares
+#   `urn:cap:net:*` only in the DISCOVERING form (no pinned model); a pinned
+#   provider declares nothing because it touches nothing. So this catalog's set of
+#   capability-gated actions depends on the registry the operator configured.
+#   `tests/enforced.rs` pins the ungated set for a PINNED fixture provider and says
+#   so at its assertion.
+#
+# 0.12.2 is a vocabulary-tagging fix inside ikigai-llm's own graph face; nothing
+# this binary serves declares an RDF face out of that crate, so it is not a floor.
+ikigai-llm = "0.12.1"
 # HttpTransport. 0.1.7 is where "a transport must NOT follow redirects — the
 # ENDPOINT follows them, re-running the net-capability ACL against every hop"
 # became the contract, and llm.rs's `ureq::builder().redirects(0)` is written to
