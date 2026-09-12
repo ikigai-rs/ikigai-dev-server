@@ -33,16 +33,32 @@
 //!   of the annotation overlay is not in the catalog, which is why the operator's mount
 //!   line is written without a trailing colon.
 //!
-//! ## What the walk is not allowed to do
+//! ## What the walk is not allowed to do — and the one thing it now IS allowed to do
 //!
-//! The suite FIRES endpoints under `Capability::root()`, and this composition is a
+//! Most checks FIRE endpoints under `Capability::root()`, and this composition is a
 //! development seam: the first bare run really did execute `git` through `urn:system:exec`,
 //! shell out to `gh` over the network through six PR facades, and POST to a local inference
-//! server through `urn:llm:ollama:ask`. Every such action is opted out by name with the
-//! reason in [`suite`]; the description-only checks (ARGSPECS, NAMES, REQUIRES-VERB) still
-//! run over them, which is where nearly all of the inherited findings are anyway.
+//! server through `urn:llm:ollama:ask`. [`WAIVED`] names those endpoints and, per endpoint,
+//! the checks that fire them.
 //!
-//! ## Fixtures and declarations, stated here because 0.1.0 prints neither
+//! ★ **`ENFORCED` is deliberately NOT among them.** It is the one invoking check that
+//! resolves under `Capability::scoped([])`, so on an action declaring a `requires` the
+//! kernel refuses before dispatch and nothing is entered. Until `ikigai-conformance` 0.2.0
+//! there was no way to say that — `Suite::opt_out` drops every invoking check — so the
+//! twenty-two whole-endpoint waivers here bought silence on exactly the actions whose
+//! capability gate matters most. 0.2.0's `Suite::opt_out_check` narrows twenty-one of them
+//! to the checks that really fire, and the result is that this composition's subprocess
+//! seam, its ten `gh`-backed PR facades and its outbound-inference family have their
+//! declared gates under test for the first time. The twenty-second came off entirely; see
+//! [`WAIVED`].
+//!
+//! ⚠ A typed `Denied` is not proof that nothing ran first (conformance PENDING #117), so
+//! the narrowing is licensed by `tests/enforced.rs` — a separate test binary that fires
+//! every gated action under no grants while a spawn log, a loopback connection counter,
+//! the annotation store's quad count and the scratch tree watch for effects, each witness
+//! proved live first.
+//!
+//! ## Fixtures and declarations, stated here because 0.1.0 printed neither
 //!
 //! (conformance PENDING #3/#57.) Real Turtle for `rdf-union` / `rdf-diff` /
 //! `rdf-transrept`, real queries for the four `sparql-*` reads, `path` bindings into the
@@ -60,18 +76,26 @@
 //!
 //! ## What the walk still reports, after all that
 //!
-//! 103 findings, none of them this crate's: 99 `ARGSPECS` (untyped inputs, across all five
-//! module crates), one `PIPELINE` (`annotation`'s Sink takes no `content`, so the write path
-//! cannot be piped into), and three `CACHEABLE` (`llm-config`, `llm-models` and `llm-select`
-//! are `Expiry::Never` with no thread — they read the provider registry, a file nothing
-//! names a thread for, so they are cached for the life of the process). Zero `NAMES`, zero
-//! `ENFORCED`, zero `REQUIRES-VERB`, zero `SKOLEM-RDF`, zero `VOCABULARY`.
+//! 28 findings, none of them this crate's, and 23 of them `ikigai-llm`'s — which is the
+//! whole shape of the number. When this file was written the count was 103 across five
+//! module crates; `ikigai-repo`, `ikigai-rdf`, `ikigai-sparql` and `ikigai-browse` have
+//! since adopted the suite themselves and a fresh resolve picks up their fixes, so what is
+//! left is concentrated in the one dependency this manifest still pins BELOW the
+//! ecosystem's line (`ikigai-llm = "0.10.0"`; see the manifest and this repo's PENDING §2).
+//! Nineteen `ARGSPECS` (untyped `urn:llm:*` inputs), one `OUTPUTS` on `browse-file`
+//! (`text/markdown` served, not declared), two failed minimal resolutions the suite asks
+//! for fixtures for (`sparql-update`, `annotation`'s Sink), and six `CACHEABLE`
+//! (`Expiry::Never` with no thread). Zero `ENFORCED`, zero `DECLARATIONS`, zero `NAMES`,
+//! zero `REQUIRES-VERB`, zero `SKOLEM-RDF`, zero `VOCABULARY`, zero `PIPELINE`.
+//!
+//! The count is printed, never pinned: it drops on its own as each module's own adoption
+//! lands, and pinning it would make another crate's improvement a failure here.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 
-use ikigai_conformance::{Fixture, Report, Suite};
+use ikigai_conformance::{Check, Fixture, Report, Suite};
 use ikigai_core::{ArgRef, Capability, Error, Expiry, Iri, Kernel, Representation, Request, Verb};
 use ikigai_dev_server::{browse, compose, config::BrowseSettings, LIMITS};
 use ikigai_sparql::Store;
@@ -286,6 +310,14 @@ fn served() -> Served {
     let browse = browse::wire_with_store(&settings, store);
     let kernel = compose(Some(browse), || {
         let mut ollama = ikigai_llm::OpenAiConfig::ollama("fixture-model");
+        // ⚠ `OpenAiConfig::ollama`'s default base URL is `http://localhost:11434/v1` —
+        // on a developer's machine that is a LIVE Ollama, and on Brian's it is the one
+        // the reading room derives against. Every endpoint that would reach it is waived
+        // below, but a waiver is a decision and this is the backstop under it: port 1 on
+        // loopback is refused instantly, so a narrowing mistake becomes a connection
+        // error in a test rather than a request against somebody's inference server.
+        // `tests/enforced.rs` does the same with a listener it can count.
+        ollama.base_url = "http://127.0.0.1:1/v1".to_string();
         ollama.caps.context = Some(4096);
         ollama.caps.modalities = vec!["text".to_string()];
         ikigai_llm::Registry::single(ollama)
@@ -324,8 +356,99 @@ fn served() -> Served {
 /// misclassifies, so `source <any urn: graph> | urn:rdf:transrept` cannot work.
 const TURTLE: &str = "<http://example.org/a> <http://purl.org/dc/terms/title> \"demo\" .\n";
 
+/// ★ **The endpoints the walk may not FIRE, waived check by check so `ENFORCED` still
+/// runs** — `(Description::id, reason)`.
+///
+/// Until `ikigai-conformance` 0.2.0 these were twenty-two `Suite::opt_out` calls, and
+/// `opt_out` drops **every** invoking check for an id. That cost `ENFORCED` on exactly
+/// the endpoints whose capability gate matters most: the subprocess seam, ten `gh`-backed
+/// PR facades, and the outbound-inference family. `Suite::opt_out_check` waives one rule
+/// for one endpoint, so each waiver below names the checks that RESOLVE the endpoint
+/// under root — `OUTPUTS` and `CACHEABLE` everywhere, plus the two RDF checks on the four
+/// entries declaring a `text/turtle` face ([`RDF_FACED`]) — and leaves `ENFORCED`, the
+/// one invoking check that resolves under `Capability::scoped([])` instead.
+///
+/// ⚠ **That is safe only because the gate precedes the effect, and a typed `Denied` is
+/// not proof of it** (ikigai-meeting #2 found an endpoint that read three secrets and
+/// then refused; conformance PENDING #117). `tests/enforced.rs` is the proof: it fires
+/// every gated action under no grants with a spawn log, a loopback connection counter,
+/// the store's quad count and the scratch tree watching, and each witness is moved on
+/// purpose first so a vacuous pass is a red test. Narrow nothing here without adding to
+/// that file.
+///
+/// `PIPELINE` is absent by design rather than by omission: no action below declares a
+/// `content` argument, so the pipeline probe returns before firing anything. (⚠ The suite
+/// would not have told us — `DECLARATIONS` has no structural inertness rule for a
+/// `PIPELINE` or `OUTPUTS` waiver, so a needless one prints as a real waiver. Reported.)
+///
+/// One id came OFF the list entirely rather than being narrowed: `llm-ollama-model`'s
+/// opt-out claimed it "queries a live inference server", and it does not — ikigai-llm's
+/// `ModelEndpoint::invoke` returns `config.default_model` and touches nothing. It is
+/// fired in full now, and `tests/enforced.rs` pins it among the actions that declare no
+/// capability at all, because `ENFORCED` resolves those for real.
+const WAIVED: &[(&str, &str)] = &[
+    // The exec seam. Not hypothetical: the first bare run of this file resolved
+    // `urn:system:exec` under root with the suite's minimal inputs and really executed
+    // `git` (`exec: `git` exited 1`). A conformance walk must not be a way to run
+    // subprocesses.
+    (
+        "system-exec",
+        "spawns a subprocess: the bare walk executed `git`",
+    ),
+    // git against the invoking working tree, which this test does not own. CI checkouts
+    // are shallow (field guide §9), so what these read differs between machines.
+    ("repo-status", "runs git in the invoking working tree"),
+    ("repo-log", "runs git in the invoking working tree"),
+    ("repo-branch", "runs git in the invoking working tree"),
+    ("repo-list", "enumerates repositories on the machine"),
+    // `gh`: network and GitHub auth. Five facades in ikigai-repo, three in the browse
+    // family on top of them.
+    ("repo-pr-checks", "shells out to `gh`: network and auth"),
+    ("repo-pr-view", "shells out to `gh`: network and auth"),
+    ("repo-pr-list", "shells out to `gh`: network and auth"),
+    ("repo-pr-files", "shells out to `gh`: network and auth"),
+    ("repo-pr-diff", "shells out to `gh`: network and auth"),
+    ("browse-prs", "shells out to `gh`: network and auth"),
+    ("browse-prs-scoped", "shells out to `gh`: network and auth"),
+    ("browse-pr", "shells out to `gh`: network and auth"),
+    // The derivation seam: an explain or a review POSTs to a live inference server. The
+    // two PR-scoped ones do both — `gh` first, then the derivation.
+    (
+        "browse-explain",
+        "derives through urn:llm:*: a live inference server",
+    ),
+    (
+        "browse-review",
+        "derives through urn:llm:*: a live inference server",
+    ),
+    (
+        "browse-pr-explain",
+        "shells out to `gh`, then derives through urn:llm:*",
+    ),
+    (
+        "browse-pr-review",
+        "shells out to `gh`, then derives through urn:llm:*",
+    ),
+    ("llm-ask", "POSTs to a live inference server"),
+    ("llm-ollama-ask", "POSTs to a live inference server"),
+    ("llm-ollama-up", "probes a live inference server"),
+    ("llm-ollama-installed", "queries a live inference server"),
+];
+
+/// The [`WAIVED`] ids that declare a `text/turtle` face, and so need the two RDF checks
+/// waived as well — every other one declares only `text/plain` / `application/json`, and
+/// `SKOLEM-RDF` / `VOCABULARY` probe declared RDF outputs only. A waiver for a check that
+/// could not have run is itself a `DECLARATIONS` finding in 0.2.0, so this list is not
+/// tidiness: it is what keeps the waivers honest.
+const RDF_FACED: &[&str] = &[
+    "browse-explain",
+    "browse-review",
+    "browse-pr-explain",
+    "browse-pr-review",
+];
+
 fn suite() -> Suite {
-    Suite::new()
+    let mut suite = Suite::new()
         // ---- fired, with inputs that work -------------------------------------------
         .fixture(
             Fixture::new("rdf-union", Verb::Source)
@@ -389,74 +512,20 @@ fn suite() -> Suite {
         // for the conformance PENDING as
         // a well-known-list gap, not as an ikigai-browse defect.
         .namespace("http://www.w3.org/ns/oa#")
-        // ---- not fired, and why ------------------------------------------------------
-        // The exec seam. Not hypothetical: the first bare run of this file resolved
-        // `urn:system:exec` under root with the suite's minimal inputs and really executed
-        // `git` (`exec: `git` exited 1`). A conformance walk must not be a way to run
-        // subprocesses.
-        .opt_out(
-            "system-exec",
-            None,
-            "spawns a subprocess: the bare walk executed `git`",
-        )
-        // git against the invoking working tree, which this test does not own. CI checkouts
-        // are shallow (field guide §9), so what these read differs between machines.
-        .opt_out("repo-status", None, "runs git in the invoking working tree")
-        .opt_out("repo-log", None, "runs git in the invoking working tree")
-        .opt_out("repo-branch", None, "runs git in the invoking working tree")
-        .opt_out("repo-list", None, "enumerates repositories on the machine")
-        // `gh`: network and GitHub auth. Five facades in ikigai-repo, five in the browse
-        // family on top of them.
-        .opt_out(
-            "repo-pr-checks",
-            None,
-            "shells out to `gh`: network and auth",
-        )
-        .opt_out("repo-pr-view", None, "shells out to `gh`: network and auth")
-        .opt_out("repo-pr-list", None, "shells out to `gh`: network and auth")
-        .opt_out(
-            "repo-pr-files",
-            None,
-            "shells out to `gh`: network and auth",
-        )
-        .opt_out("repo-pr-diff", None, "shells out to `gh`: network and auth")
-        .opt_out("browse-prs", None, "shells out to `gh`: network and auth")
-        .opt_out(
-            "browse-prs-scoped",
-            None,
-            "shells out to `gh`: network and auth",
-        )
-        .opt_out("browse-pr", None, "shells out to `gh`: network and auth")
-        .opt_out(
-            "browse-pr-explain",
-            None,
-            "shells out to `gh`: network and auth",
-        )
-        .opt_out(
-            "browse-pr-review",
-            None,
-            "shells out to `gh`: network and auth",
-        )
-        // The derivation seam: an explain or a review POSTs to a live inference server.
-        .opt_out(
-            "browse-explain",
-            None,
-            "derives through urn:llm:*: a live inference server",
-        )
-        .opt_out(
-            "browse-review",
-            None,
-            "derives through urn:llm:*: a live inference server",
-        )
-        .opt_out("llm-ask", None, "POSTs to a live inference server")
-        .opt_out("llm-ollama-ask", None, "POSTs to a live inference server")
-        .opt_out("llm-ollama-up", None, "probes a live inference server")
-        .opt_out(
-            "llm-ollama-installed",
-            None,
-            "queries a live inference server",
-        )
-        .opt_out("llm-ollama-model", None, "queries a live inference server")
+        // ---- fired only by ENFORCED, and why -----------------------------------------
+        // (see `WAIVED` and `tests/enforced.rs`)
+        ;
+    for (id, reason) in WAIVED {
+        suite = suite
+            .opt_out_check(*id, Check::Outputs, *reason)
+            .opt_out_check(*id, Check::Cacheable, *reason);
+        if RDF_FACED.contains(id) {
+            suite = suite
+                .opt_out_check(*id, Check::SkolemRdf, *reason)
+                .opt_out_check(*id, Check::Vocabulary, *reason);
+        }
+    }
+    suite
 }
 
 // ---------------------------------------------------------------------------

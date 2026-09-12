@@ -175,9 +175,35 @@ composing host is the only place to ask:
 
 Findings from the composed modules (`ikigai-repo`, `ikigai-rdf`,
 `ikigai-sparql`, `ikigai-browse`, `ikigai-llm`) are **recorded and attributed,
-not fixed here** — they belong to those repos. Today: 103, of which 99 are
-untyped inputs. Zero are this crate's, and the test fails if a finding ever
+not fixed here** — they belong to those repos. Today: 28, of which 23 are
+`ikigai-llm`'s (the one dependency this manifest still pins below the
+ecosystem's line). Zero are this crate's, and the test fails if a finding ever
 names an endpoint the catalog table does not.
+
+### The declared capability gates are under test
+
+A conformance walk fires endpoints, and this composition is a development seam:
+a bare walk really does execute `git`, shell out to `gh`, and POST to whatever
+is listening on the inference port. Those endpoints are waived — but
+`ikigai-conformance` 0.2.0 waives **per check**, so the waivers now name the
+checks that fire an endpoint under root and leave `ENFORCED` running. `ENFORCED`
+resolves under a capability holding no grants, so on an action that declares a
+`requires` the kernel refuses before dispatch and the endpoint is never entered.
+Twenty-one endpoints moved from "checked for nothing but their descriptions" to
+"their capability gate is exercised on every CI run": `urn:system:exec`, the four
+`urn:repo:*` git readers, the ten `gh`-backed PR facades, and the outbound
+inference family.
+
+A typed `Denied` is not by itself proof that nothing ran first, so
+`tests/enforced.rs` is the licence under that: a separate test binary that puts
+shims for `git` and `gh` on `PATH`, points the LLM registry at a loopback
+listener it counts connections on, and watches the annotation store's quad count
+and the scratch tree. Every gated action is fired under no grants and must be
+refused **with all four witnesses unmoved** — and each witness is deliberately
+moved first, under a capability that grants the scope, so a witness that cannot
+see is a red test rather than a quiet pass. The complement is pinned too: an
+action declaring no `requires` is one `ENFORCED` resolves for real, so a module
+that grows an ungated action fails that test instead of making the next walk act.
 
 ## Security posture (honest)
 
@@ -187,8 +213,11 @@ check (owner-only socket). A per-scope capability *ceiling* enforced
 server-side is the "capability-on-the-wire" work; until then the local owner
 is trusted and the reachable surface is bounded by what is linked and limited.
 Browse's own capability story (`urn:cap:browse:read:*`, `urn:cap:annotate`)
-comes with the crate. An MCP face (so an agent connects under a grant) is a
-fast-follow.
+comes with the crate — and as of the conformance work above, those declarations
+are exercised rather than merely declared: every gated action in the composed
+catalog is refused under no grants, with witnesses proving nothing ran first.
+That is what makes the ceiling worth building on. An MCP face (so an agent
+connects under a grant) is a fast-follow.
 
 ## License
 MIT OR Apache-2.0.
