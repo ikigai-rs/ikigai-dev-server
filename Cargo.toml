@@ -226,6 +226,6 @@ ureq = "2"                  # the native HTTP client behind urn:llm:*
 # and `cargo test`, so a dev-dependency's floor is a PRODUCTION floor. Written
 # `0.1.0` because that is what is on crates.io; the local main is ahead (an
 # OUTPUTS check), and a pin no stranger can resolve is not a pin.
-ikigai-conformance = "0.1.0"
+ikigai-conformance = "0.2.0"
 futures = "0.3"             # block_on for the by-hand probes beside the suite
 tempfile = "3"              # the scratch browse root and store

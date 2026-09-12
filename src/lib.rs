@@ -19,6 +19,21 @@
 //! the browse store (an in-memory [`ikigai_sparql::Store`] instead of the
 //! RocksDB archive — see [`browse::wire_with_store`]) and the LLM registry
 //! (lazily, so an unconfigured server still never reads `llm.json`).
+//!
+//! ## ⚠ This library is INTERNAL: no stability promise
+//!
+//! The crate publishes a binary (`ikigai-dev`). The library exists so the tests
+//! can hold the real composition rather than a re-creation of it, and every item
+//! it exports — [`compose`], [`LIMITS`], [`browse::wire_with_store`],
+//! [`llm::space_with`], [`config`] — is here for that reason and no other. Treat
+//! the whole surface as private to this repo: it changes with the composition,
+//! without a MINOR bump and without a deprecation. **What this crate versions is
+//! the set of RESOURCE NAMES behind the socket** (0.3.0 was a MINOR because
+//! `urn:annotation:` became `urn:iki:annotation:`, with the Rust API untouched) —
+//! a mount line is the public interface here, not a `use`. Nothing outside this
+//! repo depends on the library today, and nothing should start without moving
+//! the item it wants into a module crate with a suite of its own.
+//! (This repo's PENDING §4 asked for the decision; this is it.)
 
 pub mod browse;
 pub mod config;
