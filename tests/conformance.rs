@@ -769,6 +769,17 @@ fn every_served_entry_answers_meta_with_a_real_contract() {
 ///   so: "a declared golden thread is a promise a host must keep"), which is why it is
 ///   written down here. This repo's PENDING §3 owns the watcher question.
 /// * Minting the a11y thread is `ikigai-a11y`'s; keeping any of them is a host's.
+/// * ⚠ **Each resource's OWN name is not in the table, on purpose.** Since `ikigai-core`
+///   0.1.73 the kernel hangs every cacheable Source answer on its own canonical name's thread
+///   (ledger #549; ledger #512, hole A), so past 0.1.72 `urn:llm:models` reads back as
+///   `urn:llm:config` PLUS `urn:llm:models`. That thread is the resolving kernel's, not this
+///   server's: any kernel that caches the answer hangs it on its own name, so it is not what a
+///   mount erases. The probe tolerates exactly that one extra name per resource and nothing
+///   else — a FOREIGN thread still fails the table. The one place the two coincide is
+///   `urn:llm:config`, whose own name IS the registry thread the other three hang on; a
+///   resource's own name therefore stays in its row only when another probed resource hangs
+///   on it, which keeps the last assertion live: a cacheable answer whose only thread is its
+///   own name, with nothing else hanging on it, is still the disease.
 #[test]
 fn the_threads_a_mount_would_erase_are_enumerated() {
     let served = served();
@@ -789,15 +800,30 @@ fn the_threads_a_mount_would_erase_are_enumerated() {
         ("urn:llm:select", &[("needs", "text")]),
         ("urn:llm:ollama:model", &[]),
     ];
-    let mut threaded: BTreeMap<&str, Vec<String>> = BTreeMap::new();
-    let mut cached_without_a_thread: Vec<&str> = Vec::new();
+    let mut read: Vec<(&str, Expiry, Vec<String>)> = Vec::new();
     for (target, args) in probes {
         let repr = issue(&served.kernel, request(Verb::Source, target, args))
             .unwrap_or_else(|e| panic!("`{target}` resolves in the scratch composition: {e}"));
         let threads: Vec<String> = repr.threads().iter().map(|t| t.to_string()).collect();
-        if !threads.is_empty() {
-            threaded.insert(target, threads);
-        } else if repr.expiry != Expiry::Always {
+        read.push((target, repr.expiry, threads));
+    }
+    // Every thread some probed resource hangs on BESIDES its own name: the real cut points.
+    let hung_on: BTreeSet<String> = read
+        .iter()
+        .flat_map(|(target, _, threads)| threads.iter().filter(move |t| t != target).cloned())
+        .collect();
+    let mut threaded: BTreeMap<&str, Vec<String>> = BTreeMap::new();
+    let mut cached_without_a_thread: Vec<&str> = Vec::new();
+    for (target, expiry, threads) in read {
+        // The kernel's own-name thread (core ≥ 0.1.73) is dropped unless something else
+        // hangs on that name; every other thread is kept, so a foreign one still fails below.
+        let kept: Vec<String> = threads
+            .into_iter()
+            .filter(|t| t != target || hung_on.contains(target))
+            .collect();
+        if !kept.is_empty() {
+            threaded.insert(target, kept);
+        } else if expiry != Expiry::Always {
             cached_without_a_thread.push(target);
         }
     }
@@ -837,8 +863,9 @@ fn the_threads_a_mount_would_erase_are_enumerated() {
     }
     assert!(
         cached_without_a_thread.is_empty(),
-        "every cacheable representation this server serves now names a thread — one that \
-         arrived here cacheable with nothing to cut is exactly the mount disease, in-process: \
+        "every cacheable representation this server serves now names a thread besides its \
+         own name — one that arrived here cacheable with nothing to cut is exactly the mount \
+         disease, in-process: \
          {cached_without_a_thread:?}"
     );
 }
