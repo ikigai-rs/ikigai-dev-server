@@ -1,5 +1,12 @@
 # ikigai-dev-server
 
+> ⚠ **Superseded and archived (2026-10-07).** Everything this server provided, the browse family
+> (`urn:repo:*`, `urn:iki:annotation`) and a SPARQL face (`urn:sparql:*`), is served by
+> [ikigai-gonk](https://github.com/ikigai-rs/ikigai-gonk), which also hosts the work ledger and
+> enforces per-graph read capabilities on its query face. This repository is read-only and the
+> `ikigai-dev-server` crate will receive no further releases. The cutover is documented in gonk's
+> README (*Retiring `ikigai-dev-server`: the cutover*).
+
 A standalone, **linkage-gated** [ikigai](https://github.com/ikigai-rs) server for
 development tooling. Its `Cargo.toml` *is* the module manifest: the binary
 composes a curated space and links **only** what it serves.
